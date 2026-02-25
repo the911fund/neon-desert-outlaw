@@ -17,6 +17,8 @@ import { CHUNK_SIZE, TILE_SIZE } from '../world/Chunk';
 import type { ObstacleType } from '../world/ObstacleFactory';
 import { Headlights } from '../vehicle/Headlights';
 import { AudioManager } from '../audio/AudioManager';
+import { CollisionSystem } from '../physics/CollisionSystem';
+import { Vector2 } from '../utils/Vector2';
 
 export class Game {
   private app: Application;
@@ -32,6 +34,7 @@ export class Game {
   private bloom: BloomFilter;
   private headlights: Headlights;
   private audio: AudioManager;
+  private collisions: CollisionSystem;
   private accumulator = 0;
 
   private camera: Camera;
@@ -90,6 +93,7 @@ export class Game {
     this.app.stage.addChild(this.uiContainer);
 
     this.input = new InputManager();
+    this.collisions = new CollisionSystem();
 
     // Initialize audio system
     this.audio = new AudioManager();
@@ -190,6 +194,26 @@ export class Game {
       }
     }
 
+    // Collision detection
+    const loadedChunks = this.worldManager.getLoadedChunks();
+    const collisionResults = this.collisions.checkCollisions(
+      this.vehicle.model.position,
+      loadedChunks
+    );
+    if (collisionResults.length > 0) {
+      const { totalSparks, collisionPosition } = this.collisions.applyCollisions(
+        this.vehicle.model.position,
+        this.vehicle.model.velocity,
+        collisionResults
+      );
+      if (totalSparks > 0 && collisionPosition) {
+        this.particles.emitSparks(collisionPosition, totalSparks);
+      }
+    }
+
+    // Screen shake
+    const shake = this.collisions.updateShake(dt);
+    
     const velocity = this.vehicle.model.velocity;
     this.camera.update(
       this.vehicle.model.position.x,
@@ -199,6 +223,11 @@ export class Game {
       this.vehicle.speed
     );
     this.camera.applyToContainer(this.world);
+    // Apply screen shake offset
+    if (shake.x !== 0 || shake.y !== 0) {
+      this.world.x += shake.x;
+      this.world.y += shake.y;
+    }
 
     const cameraPos = this.camera.position;
     this.worldManager.update(cameraPos.x, cameraPos.y);
