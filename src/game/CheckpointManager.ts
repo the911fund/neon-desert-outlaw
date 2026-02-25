@@ -16,8 +16,8 @@ export class CheckpointManager {
   private bloom: BloomFilter;
   private time = 0;
 
-  private readonly collectionRadius = 80;
-  private readonly gateRadius = 30;
+  private readonly collectionRadius = 100;
+  private readonly gateRadius = 45;
   private readonly neonCyan = 0x00ffff;
   private readonly neonMagenta = 0xff00ff;
 

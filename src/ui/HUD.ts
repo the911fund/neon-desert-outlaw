@@ -735,9 +735,18 @@ export class HUD {
   private drawDirectionArrow(angle: number): void {
     this.arrowGraphics.clear();
 
-    // Arrow is drawn at a fixed screen position, rotated to point at next checkpoint
-    const size = 16;
-    this.arrowGraphics.beginFill(this.neonMagenta, 0.9);
+    // Large, visible arrow pointing to next checkpoint
+    const size = 28;
+    // Outer glow
+    this.arrowGraphics.beginFill(this.neonMagenta, 0.3);
+    this.arrowGraphics.moveTo(size + 4, 0);
+    this.arrowGraphics.lineTo(-size * 0.5 - 2, -size * 0.7);
+    this.arrowGraphics.lineTo(-size * 0.3, 0);
+    this.arrowGraphics.lineTo(-size * 0.5 - 2, size * 0.7);
+    this.arrowGraphics.closePath();
+    this.arrowGraphics.endFill();
+    // Solid arrow
+    this.arrowGraphics.beginFill(this.neonMagenta, 0.95);
     this.arrowGraphics.moveTo(size, 0);
     this.arrowGraphics.lineTo(-size * 0.5, -size * 0.6);
     this.arrowGraphics.lineTo(-size * 0.3, 0);

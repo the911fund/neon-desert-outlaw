@@ -403,6 +403,21 @@ export class Game {
       }
     }
 
+    // Bot collision detection
+    for (const bot of this.bots) {
+      const botCollisions = this.collisions.checkCollisions(
+        bot.model.position,
+        loadedChunks
+      );
+      if (botCollisions.length > 0) {
+        this.collisions.applyCollisions(
+          bot.model.position,
+          bot.model.velocity,
+          botCollisions
+        );
+      }
+    }
+
     // Screen shake
     const shake = this.collisions.updateShake(dt);
 
