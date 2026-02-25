@@ -2,6 +2,8 @@ import { Container } from 'pixi.js';
 import type { Application } from 'pixi.js';
 import { GAME_CONFIG } from './GameConfig';
 import { InputManager } from './InputManager';
+import { RaceMode, RaceState } from './RaceMode';
+import { CheckpointManager } from './CheckpointManager';
 import { Vehicle } from '../vehicle/Vehicle';
 import { SurfaceType, getSurfaceFriction } from '../physics/SurfaceTypes';
 import { Camera } from '../rendering/Camera';
@@ -35,6 +37,8 @@ export class Game {
   private headlights: Headlights;
   private audio: AudioManager;
   private collisions: CollisionSystem;
+  private raceMode: RaceMode;
+  private checkpoints: CheckpointManager;
   private accumulator = 0;
 
   private camera: Camera;
@@ -45,6 +49,7 @@ export class Game {
 
   private currentSurface: SurfaceType = SurfaceType.Road;
   private driftScore = 0;
+  private lastRaceState: RaceState = RaceState.TITLE;
 
   constructor(app: Application) {
     this.app = app;
@@ -69,11 +74,18 @@ export class Game {
     this.miniMap = new MiniMap();
     this.touchControls = new TouchControls();
 
-    // Add world elements
-    this.world.addChild(this.terrainLayer, this.trackLayer, this.vehicle.container, this.particleLayer);
-    this.app.stage.addChild(this.world);
-
     this.bloom = new BloomFilter();
+
+    // Checkpoint system (added to world before vehicle for layering)
+    this.checkpoints = new CheckpointManager(this.bloom);
+    this.checkpoints.generateCircuit();
+
+    // Race mode state machine
+    this.raceMode = new RaceMode();
+
+    // Add world elements
+    this.world.addChild(this.terrainLayer, this.trackLayer, this.checkpoints.container, this.vehicle.container, this.particleLayer);
+    this.app.stage.addChild(this.world);
     this.headlights = new Headlights();
     this.lighting = new LightingSystem(this.app.renderer.width, this.app.renderer.height);
     this.lighting.addLight(this.headlights.container);
@@ -170,6 +182,20 @@ export class Game {
 
   private update = (): void => {
     const dt = this.app.ticker.deltaMS / 1000;
+
+    // Update race mode state machine
+    this.raceMode.update(dt);
+
+    // Reset vehicle when transitioning to READY state
+    if (this.raceMode.state === RaceState.READY && this.lastRaceState !== RaceState.READY) {
+      this.vehicle.model.position.set(0, 0);
+      this.vehicle.model.velocity.set(0, 0);
+      this.vehicle.model.heading = 0;
+      this.vehicle.model.yawRate = 0;
+      this.checkpoints.reset();
+    }
+    this.lastRaceState = this.raceMode.state;
+
     this.accumulator = Math.min(
       this.accumulator + dt,
       GAME_CONFIG.physicsStep * GAME_CONFIG.maxSubSteps
@@ -180,7 +206,12 @@ export class Game {
     this.input.setTouchInput(touchInput);
 
     while (this.accumulator >= GAME_CONFIG.physicsStep) {
-      const input = this.input.getInput();
+      // Only process vehicle input during racing
+      const rawInput = this.input.getInput();
+      const input = this.raceMode.inputEnabled
+        ? rawInput
+        : { throttle: 0, brake: 0, steer: 0, handbrake: 0 };
+
       this.currentSurface = this.getSurfaceAt(this.vehicle.model.position.x, this.vehicle.model.position.y);
       const friction = getSurfaceFriction(this.currentSurface);
       this.vehicle.update(GAME_CONFIG.physicsStep, input, friction);
@@ -192,6 +223,20 @@ export class Game {
       } else if (this.vehicle.driftPhase === 'Normal') {
         this.driftScore = 0;
       }
+    }
+
+    // Checkpoint detection during racing
+    if (this.raceMode.state === RaceState.RACING) {
+      const collected = this.checkpoints.update(dt, this.vehicle.model.position);
+      if (collected) {
+        this.hud.triggerCheckpointFlash();
+        if (this.checkpoints.isComplete()) {
+          this.raceMode.finish();
+        }
+      }
+    } else {
+      // Still update checkpoint visuals (pulsing) even when not racing
+      this.checkpoints.update(dt, new Vector2(-99999, -99999));
     }
 
     // Collision detection
@@ -213,7 +258,7 @@ export class Game {
 
     // Screen shake
     const shake = this.collisions.updateShake(dt);
-    
+
     const velocity = this.vehicle.model.velocity;
     this.camera.update(
       this.vehicle.model.position.x,
@@ -259,6 +304,26 @@ export class Game {
       driftScore: this.driftScore,
       surfaceType: this.currentSurface,
     });
+
+    // Update Race HUD
+    const nextCp = this.checkpoints.getNextCheckpoint();
+    let arrowAngle: number | null = null;
+    if (nextCp) {
+      const dx = nextCp.position.x - this.vehicle.model.position.x;
+      const dy = nextCp.position.y - this.vehicle.model.position.y;
+      arrowAngle = Math.atan2(dy, dx);
+    }
+
+    this.hud.updateRace({
+      raceState: this.raceMode.state,
+      raceTime: this.raceMode.raceTime,
+      formattedTime: this.raceMode.formatTime(this.raceMode.raceTime),
+      checkpointCurrent: this.checkpoints.getCurrentIndex(),
+      checkpointTotal: this.checkpoints.getTotal(),
+      countdownValue: this.raceMode.countdownValue,
+      bestTime: this.raceMode.bestTime !== null ? this.raceMode.formatTime(this.raceMode.bestTime) : null,
+      arrowAngle,
+    }, dt);
 
     // Update audio
     this.audio.update({

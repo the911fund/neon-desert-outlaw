@@ -2,6 +2,7 @@ import { Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { DriftPhase } from '../physics/DriftState';
 import { SurfaceType } from '../physics/SurfaceTypes';
 import { clamp } from '../utils/MathUtils';
+import { RaceState } from '../game/RaceMode';
 
 export interface HUDState {
   speed: number; // m/s
@@ -9,6 +10,17 @@ export interface HUDState {
   driftPhase: DriftPhase;
   driftScore: number;
   surfaceType: SurfaceType;
+}
+
+export interface RaceHUDState {
+  raceState: RaceState;
+  raceTime: number;
+  formattedTime: string;
+  checkpointCurrent: number;
+  checkpointTotal: number;
+  countdownValue: number;
+  bestTime: string | null;
+  arrowAngle: number | null; // angle from vehicle to next checkpoint in radians, null if no target
 }
 
 export class HUD {
@@ -32,6 +44,22 @@ export class HUD {
   private surfaceContainer: Container;
   private surfaceIcon: Graphics;
   private surfaceLabel: Text;
+
+  // Race HUD elements
+  private raceTimerContainer: Container;
+  private raceTimerText: Text;
+  private checkpointText: Text;
+  private arrowGraphics: Graphics;
+  private overlayContainer: Container;
+  private overlayBg: Graphics;
+  private overlayTitle: Text;
+  private overlaySubtitle: Text;
+  private overlayBest: Text;
+  private countdownText: Text;
+  private flashGraphics: Graphics;
+  private flashAlpha = 0;
+  private soundHintText: Text;
+  private soundHintTimer = 4;
 
   private readonly neonCyan = 0x00ffff;
   private readonly neonMagenta = 0xff00ff;
@@ -61,15 +89,36 @@ export class HUD {
     this.surfaceIcon = new Graphics();
     this.surfaceLabel = new Text({ text: 'ROAD', style: this.createLabelStyle() });
 
+    // Race HUD
+    this.raceTimerContainer = new Container();
+    this.raceTimerText = new Text({ text: '00:00.00', style: this.createTimerStyle() });
+    this.checkpointText = new Text({ text: '', style: this.createCheckpointStyle() });
+    this.arrowGraphics = new Graphics();
+    this.overlayContainer = new Container();
+    this.overlayBg = new Graphics();
+    this.overlayTitle = new Text({ text: '', style: this.createOverlayTitleStyle() });
+    this.overlaySubtitle = new Text({ text: '', style: this.createOverlaySubtitleStyle() });
+    this.overlayBest = new Text({ text: '', style: this.createOverlayBestStyle() });
+    this.countdownText = new Text({ text: '', style: this.createCountdownStyle() });
+    this.flashGraphics = new Graphics();
+    this.soundHintText = new Text({ text: 'Press M for sound', style: this.createLabelStyle() });
+
     this.setupSpeedDisplay();
     this.setupRPMDisplay();
     this.setupDriftDisplay();
     this.setupSurfaceDisplay();
+    this.setupRaceHUD();
 
     this.container.addChild(this.speedContainer);
     this.container.addChild(this.rpmContainer);
     this.container.addChild(this.driftContainer);
     this.container.addChild(this.surfaceContainer);
+    this.container.addChild(this.raceTimerContainer);
+    this.container.addChild(this.arrowGraphics);
+    this.container.addChild(this.flashGraphics);
+    this.container.addChild(this.overlayContainer);
+    this.container.addChild(this.countdownText);
+    this.container.addChild(this.soundHintText);
 
     // Initially hide drift display
     this.driftContainer.visible = false;
@@ -291,6 +340,239 @@ export class HUD {
     }
   }
 
+  private createTimerStyle(): TextStyle {
+    return new TextStyle({
+      fontFamily: 'monospace',
+      fontSize: 32,
+      fontWeight: 'bold',
+      fill: 0xffffff,
+      dropShadow: {
+        color: this.neonCyan,
+        blur: 6,
+        distance: 0,
+      },
+    });
+  }
+
+  private createCheckpointStyle(): TextStyle {
+    return new TextStyle({
+      fontFamily: 'monospace',
+      fontSize: 18,
+      fill: this.neonCyan,
+    });
+  }
+
+  private createOverlayTitleStyle(): TextStyle {
+    return new TextStyle({
+      fontFamily: 'monospace',
+      fontSize: 56,
+      fontWeight: 'bold',
+      fill: this.neonCyan,
+      dropShadow: {
+        color: this.neonCyan,
+        blur: 16,
+        distance: 0,
+      },
+    });
+  }
+
+  private createOverlaySubtitleStyle(): TextStyle {
+    return new TextStyle({
+      fontFamily: 'monospace',
+      fontSize: 20,
+      fill: 0xcccccc,
+    });
+  }
+
+  private createOverlayBestStyle(): TextStyle {
+    return new TextStyle({
+      fontFamily: 'monospace',
+      fontSize: 18,
+      fill: this.neonMagenta,
+    });
+  }
+
+  private createCountdownStyle(): TextStyle {
+    return new TextStyle({
+      fontFamily: 'monospace',
+      fontSize: 96,
+      fontWeight: 'bold',
+      fill: 0xffffff,
+      dropShadow: {
+        color: this.neonMagenta,
+        blur: 20,
+        distance: 0,
+      },
+    });
+  }
+
+  private setupRaceHUD(): void {
+    // Timer panel (top center)
+    const timerPanel = new Graphics();
+    timerPanel.beginFill(this.panelBg, this.panelBgAlpha);
+    timerPanel.drawRoundedRect(-100, -5, 200, 70, 8);
+    timerPanel.endFill();
+    timerPanel.lineStyle(2, this.neonCyan, 0.4);
+    timerPanel.drawRoundedRect(-100, -5, 200, 70, 8);
+
+    this.raceTimerText.anchor.set(0.5, 0);
+    this.raceTimerText.position.set(0, 0);
+    this.checkpointText.anchor.set(0.5, 0);
+    this.checkpointText.position.set(0, 38);
+
+    this.raceTimerContainer.addChild(timerPanel);
+    this.raceTimerContainer.addChild(this.raceTimerText);
+    this.raceTimerContainer.addChild(this.checkpointText);
+    this.raceTimerContainer.visible = false;
+
+    // Overlay (title/finish screens)
+    this.overlayTitle.anchor.set(0.5, 0.5);
+    this.overlaySubtitle.anchor.set(0.5, 0.5);
+    this.overlayBest.anchor.set(0.5, 0.5);
+
+    this.overlayContainer.addChild(this.overlayBg);
+    this.overlayContainer.addChild(this.overlayTitle);
+    this.overlayContainer.addChild(this.overlaySubtitle);
+    this.overlayContainer.addChild(this.overlayBest);
+    this.overlayContainer.visible = false;
+
+    // Countdown
+    this.countdownText.anchor.set(0.5, 0.5);
+    this.countdownText.visible = false;
+
+    // Sound hint
+    this.soundHintText.alpha = 0.6;
+  }
+
+  updateRace(state: RaceHUDState, dt: number): void {
+    // Sound hint fade
+    if (this.soundHintTimer > 0) {
+      this.soundHintTimer -= dt;
+      this.soundHintText.visible = true;
+      if (this.soundHintTimer < 1) {
+        this.soundHintText.alpha = Math.max(0, this.soundHintTimer) * 0.6;
+      }
+    } else {
+      this.soundHintText.visible = false;
+    }
+
+    // Checkpoint flash effect
+    if (this.flashAlpha > 0) {
+      this.flashAlpha = Math.max(0, this.flashAlpha - dt * 3);
+      this.flashGraphics.clear();
+      this.flashGraphics.beginFill(this.neonCyan, this.flashAlpha * 0.3);
+      this.flashGraphics.drawRect(0, 0, 2000, 2000);
+      this.flashGraphics.endFill();
+      this.flashGraphics.visible = true;
+    } else {
+      this.flashGraphics.visible = false;
+    }
+
+    const showTimer = state.raceState === RaceState.RACING || state.raceState === RaceState.FINISHED;
+    this.raceTimerContainer.visible = showTimer;
+
+    if (showTimer) {
+      this.raceTimerText.text = state.formattedTime;
+      this.checkpointText.text = `Checkpoint ${state.checkpointCurrent}/${state.checkpointTotal}`;
+    }
+
+    // Direction arrow
+    this.arrowGraphics.visible = state.raceState === RaceState.RACING && state.arrowAngle !== null;
+    if (state.arrowAngle !== null && state.raceState === RaceState.RACING) {
+      this.drawDirectionArrow(state.arrowAngle);
+    }
+
+    // Countdown
+    this.countdownText.visible = state.raceState === RaceState.COUNTDOWN;
+    if (state.raceState === RaceState.COUNTDOWN) {
+      this.countdownText.text = state.countdownValue > 0 ? state.countdownValue.toString() : 'GO!';
+    }
+
+    // Overlay screens
+    const showOverlay = state.raceState === RaceState.TITLE
+      || state.raceState === RaceState.READY
+      || state.raceState === RaceState.FINISHED;
+    this.overlayContainer.visible = showOverlay;
+
+    if (showOverlay) {
+      this.drawOverlay(state);
+    }
+  }
+
+  private drawOverlay(state: RaceHUDState): void {
+    this.overlayBg.clear();
+    this.overlayBg.beginFill(0x000000, 0.6);
+    this.overlayBg.drawRect(-1000, -500, 2000, 1000);
+    this.overlayBg.endFill();
+
+    switch (state.raceState) {
+      case RaceState.TITLE:
+        this.overlayTitle.text = 'NEON DESERT OUTLAW';
+        this.overlayTitle.position.set(0, -40);
+        this.overlaySubtitle.text = 'Press ENTER to race';
+        this.overlaySubtitle.position.set(0, 30);
+        if (state.bestTime) {
+          this.overlayBest.text = `Best: ${state.bestTime}`;
+          this.overlayBest.position.set(0, 70);
+          this.overlayBest.visible = true;
+        } else {
+          this.overlayBest.visible = false;
+        }
+        break;
+
+      case RaceState.READY:
+        this.overlayTitle.text = 'READY';
+        this.overlayTitle.position.set(0, -40);
+        this.overlaySubtitle.text = 'Press ENTER to start';
+        this.overlaySubtitle.position.set(0, 30);
+        if (state.bestTime) {
+          this.overlayBest.text = `Best: ${state.bestTime}`;
+          this.overlayBest.position.set(0, 70);
+          this.overlayBest.visible = true;
+        } else {
+          this.overlayBest.visible = false;
+        }
+        break;
+
+      case RaceState.FINISHED:
+        this.overlayTitle.text = state.formattedTime;
+        this.overlayTitle.position.set(0, -40);
+        this.overlaySubtitle.text = 'Press ENTER to restart';
+        this.overlaySubtitle.position.set(0, 30);
+        if (state.bestTime) {
+          this.overlayBest.text = `Best: ${state.bestTime}`;
+          this.overlayBest.position.set(0, 70);
+          this.overlayBest.visible = true;
+        } else {
+          this.overlayBest.visible = false;
+        }
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  private drawDirectionArrow(angle: number): void {
+    this.arrowGraphics.clear();
+
+    // Arrow is drawn at a fixed screen position, rotated to point at next checkpoint
+    const size = 16;
+    this.arrowGraphics.beginFill(this.neonMagenta, 0.9);
+    this.arrowGraphics.moveTo(size, 0);
+    this.arrowGraphics.lineTo(-size * 0.5, -size * 0.6);
+    this.arrowGraphics.lineTo(-size * 0.3, 0);
+    this.arrowGraphics.lineTo(-size * 0.5, size * 0.6);
+    this.arrowGraphics.closePath();
+    this.arrowGraphics.endFill();
+
+    this.arrowGraphics.rotation = angle;
+  }
+
+  triggerCheckpointFlash(): void {
+    this.flashAlpha = 1;
+  }
+
   update(state: HUDState): void {
     // Speed in km/h (assuming input is m/s)
     const speedKmh = Math.round(state.speed * 3.6);
@@ -310,5 +592,20 @@ export class HUD {
   setPosition(screenWidth: number, screenHeight: number): void {
     // Drift display at bottom center
     this.driftContainer.position.set(screenWidth / 2, screenHeight - 100);
+
+    // Race timer at top center
+    this.raceTimerContainer.position.set(screenWidth / 2, 15);
+
+    // Direction arrow below timer
+    this.arrowGraphics.position.set(screenWidth / 2, 100);
+
+    // Overlay at center
+    this.overlayContainer.position.set(screenWidth / 2, screenHeight / 2);
+
+    // Countdown at center
+    this.countdownText.position.set(screenWidth / 2, screenHeight / 2);
+
+    // Sound hint at bottom
+    this.soundHintText.position.set(screenWidth / 2 - 70, screenHeight - 30);
   }
 }
