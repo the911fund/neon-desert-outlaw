@@ -30,21 +30,21 @@ export class BicycleModel {
 
   readonly driftState = new DriftState();
 
-  mass = 1200; // kg
-  wheelBase = 2.6; // meters
-  cgToFront = 1.1;
-  cgToRear = 1.5;
-  cgHeight = 0.55;
-  inertia = 1500;
-  maxSteer = 0.6; // radians
-  maxEngineForce = 9000; // N
-  maxBrakeForce = 12000; // N
-  maxHandbrakeForce = 6000; // N
-  corneringStiffnessFront = 60000;
-  corneringStiffnessRear = 65000;
-  rollingResistance = 12.5;
-  dragCoefficient = 0.425;
-  yawDamping = 2.2;
+  mass = 900; // kg — lighter = snappier
+  wheelBase = 2.4; // meters
+  cgToFront = 1.0;
+  cgToRear = 1.4;
+  cgHeight = 0.45;
+  inertia = 900; // lower = faster rotation
+  maxSteer = 0.85; // radians — wider steering range
+  maxEngineForce = 14000; // N — punchier acceleration
+  maxBrakeForce = 15000; // N
+  maxHandbrakeForce = 8000; // N
+  corneringStiffnessFront = 38000; // lower = quicker turn-in
+  corneringStiffnessRear = 42000;
+  rollingResistance = 8.0; // less drag at low speed
+  dragCoefficient = 0.35; // less air resistance
+  yawDamping = 1.4; // less damping = more responsive rotation
 
   private debugInfo: BicycleDebugInfo = {
     longitudinalForce: 0,

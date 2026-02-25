@@ -30,7 +30,7 @@ export class AudioManager {
   private surfaceOsc: OscillatorNode | null = null;
   private surfaceGain: GainNode | null = null;
 
-  private _muted = false;
+  private _muted = true;
   private _volume = 0.5;
   private started = false;
 
