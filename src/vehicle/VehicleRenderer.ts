@@ -32,10 +32,10 @@ export class VehicleRenderer {
   // Dimensions (roughly 40x20 base, scalable)
   private readonly length = 40;
   private readonly width = 20;
-  private readonly bodyColor = 0x1a1a1a; // matte black
+  private readonly bodyColor: number;
   private readonly roofColor = 0x0d0d0d; // darker roof/window
-  private readonly accentColor = 0x00ffff; // cyan neon
-  private readonly underglowColor = 0x00ffff;
+  private readonly accentColor: number;
+  private readonly underglowColor: number;
   private readonly wheelColor = 0x2a2a2a;
   private readonly brakeLightColor = 0xff2020;
 
@@ -46,7 +46,10 @@ export class VehicleRenderer {
     damageState: DamageState.Pristine,
   };
 
-  constructor() {
+  constructor(bodyColor = 0x1a1a1a, accentColor = 0x00ffff) {
+    this.bodyColor = bodyColor;
+    this.accentColor = accentColor;
+    this.underglowColor = accentColor;
     this.container = new Container();
 
     // Create layers from bottom to top
