@@ -16,6 +16,7 @@ import { WorldManager } from '../world/WorldManager';
 import { CHUNK_SIZE, TILE_SIZE } from '../world/Chunk';
 import type { ObstacleType } from '../world/ObstacleFactory';
 import { Headlights } from '../vehicle/Headlights';
+import { AudioManager } from '../audio/AudioManager';
 
 export class Game {
   private app: Application;
@@ -30,6 +31,7 @@ export class Game {
   private particles: ParticleSystem;
   private bloom: BloomFilter;
   private headlights: Headlights;
+  private audio: AudioManager;
   private accumulator = 0;
 
   private camera: Camera;
@@ -88,6 +90,19 @@ export class Game {
     this.app.stage.addChild(this.uiContainer);
 
     this.input = new InputManager();
+
+    // Initialize audio system
+    this.audio = new AudioManager();
+    this.input.setMuteToggleHandler(() => this.audio.toggleMute());
+
+    // Start audio on first user interaction (browser autoplay policy)
+    const startAudio = (): void => {
+      this.audio.start();
+      window.removeEventListener('click', startAudio);
+      window.removeEventListener('keydown', startAudio);
+    };
+    window.addEventListener('click', startAudio);
+    window.addEventListener('keydown', startAudio);
 
     this.app.ticker.add(this.update);
     window.addEventListener('resize', this.handleResize);
@@ -214,6 +229,15 @@ export class Game {
       driftPhase: this.vehicle.driftPhase,
       driftScore: this.driftScore,
       surfaceType: this.currentSurface,
+    });
+
+    // Update audio
+    this.audio.update({
+      speed: this.vehicle.speed,
+      maxSpeed: 60,
+      driftPhase: this.vehicle.driftPhase,
+      surface: this.currentSurface,
+      isBraking: this.input.getInput().brake > 0,
     });
 
     // Update MiniMap
