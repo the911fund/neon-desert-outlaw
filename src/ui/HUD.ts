@@ -3,6 +3,7 @@ import { DriftPhase } from '../physics/DriftState';
 import { SurfaceType } from '../physics/SurfaceTypes';
 import { clamp } from '../utils/MathUtils';
 import { RaceState } from '../game/RaceMode';
+import type { RacerStanding } from '../game/RaceStandings';
 
 export interface HUDState {
   speed: number; // m/s
@@ -20,8 +21,20 @@ export interface RaceHUDState {
   checkpointTotal: number;
   countdownValue: number;
   bestTime: string | null;
-  arrowAngle: number | null; // angle from vehicle to next checkpoint in radians, null if no target
+  arrowAngle: number | null;
+  playerPosition?: number;
+  totalRacers?: number;
+  standings?: RacerStanding[];
 }
+
+const POSITION_COLORS: Record<number, number> = {
+  1: 0xffd700, // gold
+  2: 0xc0c0c0, // silver
+  3: 0xcd7f32, // bronze
+  4: 0x888888, // gray
+};
+
+const POSITION_LABELS = ['1st', '2nd', '3rd', '4th'];
 
 export class HUD {
   readonly container: Container;
@@ -60,6 +73,19 @@ export class HUD {
   private flashAlpha = 0;
   private soundHintText: Text;
   private soundHintTimer = 4;
+
+  // Position display
+  private positionContainer: Container;
+  private positionText: Text;
+  private positionPanel: Graphics;
+
+  // Standings list
+  private standingsContainer: Container;
+  private standingsPanel: Graphics;
+  private standingsTexts: Text[] = [];
+
+  // Finish standings for overlay
+  private overlayStandingsTexts: Text[] = [];
 
   private readonly neonCyan = 0x00ffff;
   private readonly neonMagenta = 0xff00ff;
@@ -103,11 +129,33 @@ export class HUD {
     this.flashGraphics = new Graphics();
     this.soundHintText = new Text({ text: 'Press M for sound', style: this.createLabelStyle() });
 
+    // Position display (top right)
+    this.positionContainer = new Container();
+    this.positionPanel = new Graphics();
+    this.positionText = new Text({ text: '1st', style: this.createPositionStyle() });
+
+    // Mini standings
+    this.standingsContainer = new Container();
+    this.standingsPanel = new Graphics();
+    for (let i = 0; i < 4; i++) {
+      const text = new Text({ text: '', style: this.createStandingStyle() });
+      this.standingsTexts.push(text);
+    }
+
+    // Overlay standings for finish screen
+    for (let i = 0; i < 4; i++) {
+      const text = new Text({ text: '', style: this.createOverlayStandingStyle() });
+      text.anchor.set(0.5, 0);
+      this.overlayStandingsTexts.push(text);
+    }
+
     this.setupSpeedDisplay();
     this.setupRPMDisplay();
     this.setupDriftDisplay();
     this.setupSurfaceDisplay();
     this.setupRaceHUD();
+    this.setupPositionDisplay();
+    this.setupStandingsDisplay();
 
     this.container.addChild(this.speedContainer);
     this.container.addChild(this.rpmContainer);
@@ -116,12 +164,16 @@ export class HUD {
     this.container.addChild(this.raceTimerContainer);
     this.container.addChild(this.arrowGraphics);
     this.container.addChild(this.flashGraphics);
+    this.container.addChild(this.positionContainer);
+    this.container.addChild(this.standingsContainer);
     this.container.addChild(this.overlayContainer);
     this.container.addChild(this.countdownText);
     this.container.addChild(this.soundHintText);
 
     // Initially hide drift display
     this.driftContainer.visible = false;
+    this.positionContainer.visible = false;
+    this.standingsContainer.visible = false;
   }
 
   private createSpeedStyle(): TextStyle {
@@ -179,6 +231,36 @@ export class HUD {
         blur: 6,
         distance: 0,
       },
+    });
+  }
+
+  private createPositionStyle(): TextStyle {
+    return new TextStyle({
+      fontFamily: 'monospace',
+      fontSize: 42,
+      fontWeight: 'bold',
+      fill: 0xffd700,
+      dropShadow: {
+        color: 0xffd700,
+        blur: 10,
+        distance: 0,
+      },
+    });
+  }
+
+  private createStandingStyle(): TextStyle {
+    return new TextStyle({
+      fontFamily: 'monospace',
+      fontSize: 13,
+      fill: 0xcccccc,
+    });
+  }
+
+  private createOverlayStandingStyle(): TextStyle {
+    return new TextStyle({
+      fontFamily: 'monospace',
+      fontSize: 18,
+      fill: 0xcccccc,
     });
   }
 
@@ -258,6 +340,27 @@ export class HUD {
 
     // Position top-left, below RPM
     this.surfaceContainer.position.set(20, 160);
+  }
+
+  private setupPositionDisplay(): void {
+    this.positionPanel.beginFill(this.panelBg, this.panelBgAlpha);
+    this.positionPanel.drawRoundedRect(0, 0, 90, 60, 8);
+    this.positionPanel.endFill();
+    this.positionPanel.lineStyle(2, 0xffd700, 0.5);
+    this.positionPanel.drawRoundedRect(0, 0, 90, 60, 8);
+
+    this.positionText.anchor.set(0.5, 0.5);
+    this.positionText.position.set(45, 30);
+
+    this.positionContainer.addChild(this.positionPanel);
+    this.positionContainer.addChild(this.positionText);
+  }
+
+  private setupStandingsDisplay(): void {
+    this.standingsContainer.addChild(this.standingsPanel);
+    for (const text of this.standingsTexts) {
+      this.standingsContainer.addChild(text);
+    }
   }
 
   private drawSurfaceIcon(surfaceType: SurfaceType): void {
@@ -434,6 +537,9 @@ export class HUD {
     this.overlayContainer.addChild(this.overlayTitle);
     this.overlayContainer.addChild(this.overlaySubtitle);
     this.overlayContainer.addChild(this.overlayBest);
+    for (const text of this.overlayStandingsTexts) {
+      this.overlayContainer.addChild(text);
+    }
     this.overlayContainer.visible = false;
 
     // Countdown
@@ -442,6 +548,46 @@ export class HUD {
 
     // Sound hint
     this.soundHintText.alpha = 0.6;
+  }
+
+  private updatePositionDisplay(position: number): void {
+    const label = POSITION_LABELS[position - 1] ?? `${position}th`;
+    const color = POSITION_COLORS[position] ?? 0x888888;
+    this.positionText.text = label;
+    this.positionText.style.fill = color;
+
+    // Redraw panel border with position color
+    this.positionPanel.clear();
+    this.positionPanel.beginFill(this.panelBg, this.panelBgAlpha);
+    this.positionPanel.drawRoundedRect(0, 0, 90, 60, 8);
+    this.positionPanel.endFill();
+    this.positionPanel.lineStyle(2, color, 0.6);
+    this.positionPanel.drawRoundedRect(0, 0, 90, 60, 8);
+  }
+
+  private updateStandingsList(standings: RacerStanding[]): void {
+    const panelWidth = 140;
+    const rowHeight = 20;
+    const panelHeight = standings.length * rowHeight + 10;
+
+    this.standingsPanel.clear();
+    this.standingsPanel.beginFill(this.panelBg, 0.6);
+    this.standingsPanel.drawRoundedRect(0, 0, panelWidth, panelHeight, 6);
+    this.standingsPanel.endFill();
+
+    for (let i = 0; i < this.standingsTexts.length; i++) {
+      if (i < standings.length) {
+        const s = standings[i];
+        const posLabel = POSITION_LABELS[i] ?? `${i + 1}th`;
+        const cpLabel = s.finished ? 'FIN' : `${s.checkpointIndex}/${standings.length > 0 ? '10' : '0'}`;
+        this.standingsTexts[i].text = `${posLabel} ${s.name.padEnd(7)} ${cpLabel}`;
+        this.standingsTexts[i].style.fill = s.color;
+        this.standingsTexts[i].position.set(8, 5 + i * rowHeight);
+        this.standingsTexts[i].visible = true;
+      } else {
+        this.standingsTexts[i].visible = false;
+      }
+    }
   }
 
   updateRace(state: RaceHUDState, dt: number): void {
@@ -488,6 +634,18 @@ export class HUD {
       this.countdownText.text = state.countdownValue > 0 ? state.countdownValue.toString() : 'GO!';
     }
 
+    // Position display and standings
+    const showPosition = state.raceState === RaceState.RACING || state.raceState === RaceState.FINISHED;
+    this.positionContainer.visible = showPosition;
+    this.standingsContainer.visible = showPosition;
+
+    if (showPosition && state.playerPosition !== undefined) {
+      this.updatePositionDisplay(state.playerPosition);
+    }
+    if (showPosition && state.standings) {
+      this.updateStandingsList(state.standings);
+    }
+
     // Overlay screens
     const showOverlay = state.raceState === RaceState.TITLE
       || state.raceState === RaceState.READY
@@ -504,6 +662,11 @@ export class HUD {
     this.overlayBg.beginFill(0x000000, 0.6);
     this.overlayBg.drawRect(-1000, -500, 2000, 1000);
     this.overlayBg.endFill();
+
+    // Hide overlay standings by default
+    for (const text of this.overlayStandingsTexts) {
+      text.visible = false;
+    }
 
     switch (state.raceState) {
       case RaceState.TITLE:
@@ -534,19 +697,35 @@ export class HUD {
         }
         break;
 
-      case RaceState.FINISHED:
-        this.overlayTitle.text = state.formattedTime;
-        this.overlayTitle.position.set(0, -40);
+      case RaceState.FINISHED: {
+        const posLabel = state.playerPosition !== undefined
+          ? (POSITION_LABELS[state.playerPosition - 1] ?? `${state.playerPosition}th`)
+          : '';
+        this.overlayTitle.text = `${posLabel} — ${state.formattedTime}`;
+        this.overlayTitle.position.set(0, -60);
         this.overlaySubtitle.text = 'Press ENTER to restart';
-        this.overlaySubtitle.position.set(0, 30);
+        this.overlaySubtitle.position.set(0, 10);
         if (state.bestTime) {
           this.overlayBest.text = `Best: ${state.bestTime}`;
-          this.overlayBest.position.set(0, 70);
+          this.overlayBest.position.set(0, 45);
           this.overlayBest.visible = true;
         } else {
           this.overlayBest.visible = false;
         }
+
+        // Show final standings
+        if (state.standings) {
+          for (let i = 0; i < this.overlayStandingsTexts.length && i < state.standings.length; i++) {
+            const s = state.standings[i];
+            const pos = POSITION_LABELS[i] ?? `${i + 1}th`;
+            this.overlayStandingsTexts[i].text = `${pos}  ${s.name}`;
+            this.overlayStandingsTexts[i].style.fill = s.color;
+            this.overlayStandingsTexts[i].position.set(0, 75 + i * 28);
+            this.overlayStandingsTexts[i].visible = true;
+          }
+        }
         break;
+      }
 
       default:
         break;
@@ -607,5 +786,11 @@ export class HUD {
 
     // Sound hint at bottom
     this.soundHintText.position.set(screenWidth / 2 - 70, screenHeight - 30);
+
+    // Position display (top right, left of minimap)
+    this.positionContainer.position.set(screenWidth - 280, 20);
+
+    // Standings below position
+    this.standingsContainer.position.set(screenWidth - 280, 90);
   }
 }

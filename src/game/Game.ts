@@ -4,6 +4,7 @@ import { GAME_CONFIG } from './GameConfig';
 import { InputManager } from './InputManager';
 import { RaceMode, RaceState } from './RaceMode';
 import { CheckpointManager } from './CheckpointManager';
+import { RaceStandings } from './RaceStandings';
 import { Vehicle } from '../vehicle/Vehicle';
 import { SurfaceType, getSurfaceFriction } from '../physics/SurfaceTypes';
 import { Camera } from '../rendering/Camera';
@@ -21,6 +22,8 @@ import { Headlights } from '../vehicle/Headlights';
 import { AudioManager } from '../audio/AudioManager';
 import { CollisionSystem } from '../physics/CollisionSystem';
 import { Vector2 } from '../utils/Vector2';
+import { BotVehicle, BOT_COLORS } from '../ai/BotVehicle';
+import { BOT_PERSONALITIES } from '../ai/BotDriver';
 
 export class Game {
   private app: Application;
@@ -50,6 +53,12 @@ export class Game {
   private currentSurface: SurfaceType = SurfaceType.Road;
   private driftScore = 0;
   private lastRaceState: RaceState = RaceState.TITLE;
+
+  // AI bots
+  private bots: BotVehicle[] = [];
+  private standings: RaceStandings;
+  private playerFinished = false;
+  private playerFinishTime: number | null = null;
 
   constructor(app: Application) {
     this.app = app;
@@ -83,8 +92,18 @@ export class Game {
     // Race mode state machine
     this.raceMode = new RaceMode();
 
-    // Add world elements
-    this.world.addChild(this.terrainLayer, this.trackLayer, this.checkpoints.container, this.vehicle.container, this.particleLayer);
+    // Race standings tracker
+    this.standings = new RaceStandings();
+
+    // Create AI bots
+    this.createBots();
+
+    // Add world elements — bots between checkpoints and player for correct layering
+    this.world.addChild(this.terrainLayer, this.trackLayer, this.checkpoints.container);
+    for (const bot of this.bots) {
+      this.world.addChild(bot.container);
+    }
+    this.world.addChild(this.vehicle.container, this.particleLayer);
     this.app.stage.addChild(this.world);
     this.headlights = new Headlights();
     this.lighting = new LightingSystem(this.app.renderer.width, this.app.renderer.height);
@@ -123,6 +142,28 @@ export class Game {
     this.app.ticker.add(this.update);
     window.addEventListener('resize', this.handleResize);
     this.handleResize();
+  }
+
+  private createBots(): void {
+    for (let i = 0; i < BOT_PERSONALITIES.length; i++) {
+      const bot = new BotVehicle(BOT_PERSONALITIES[i], BOT_COLORS[i]);
+      this.bots.push(bot);
+    }
+    this.resetBots();
+  }
+
+  private resetBots(): void {
+    // Spawn bots in a staggered grid behind and beside the player
+    const spawnOffsets = [
+      new Vector2(-60, -30),
+      new Vector2(-60, 30),
+      new Vector2(-120, 0),
+    ];
+
+    for (let i = 0; i < this.bots.length; i++) {
+      const offset = spawnOffsets[i] ?? new Vector2(-120 - i * 60, 0);
+      this.bots[i].reset(offset, 0);
+    }
   }
 
   private handleResize = (): void => {
@@ -186,13 +227,16 @@ export class Game {
     // Update race mode state machine
     this.raceMode.update(dt);
 
-    // Reset vehicle when transitioning to READY state
+    // Reset vehicle and bots when transitioning to READY state
     if (this.raceMode.state === RaceState.READY && this.lastRaceState !== RaceState.READY) {
       this.vehicle.model.position.set(0, 0);
       this.vehicle.model.velocity.set(0, 0);
       this.vehicle.model.heading = 0;
       this.vehicle.model.yawRate = 0;
       this.checkpoints.reset();
+      this.resetBots();
+      this.playerFinished = false;
+      this.playerFinishTime = null;
     }
     this.lastRaceState = this.raceMode.state;
 
@@ -205,6 +249,16 @@ export class Game {
     const touchInput = this.touchControls.getInput();
     this.input.setTouchInput(touchInput);
 
+    // Compute leader progress for rubber-banding
+    const checkpointList = this.checkpoints.getCheckpoints();
+    const totalCheckpoints = this.checkpoints.getTotal();
+    let leaderProgress = this.checkpoints.getCurrentIndex();
+    for (const bot of this.bots) {
+      if (bot.checkpointIndex > leaderProgress) {
+        leaderProgress = bot.checkpointIndex;
+      }
+    }
+
     while (this.accumulator >= GAME_CONFIG.physicsStep) {
       // Only process vehicle input during racing
       const rawInput = this.input.getInput();
@@ -215,6 +269,16 @@ export class Game {
       this.currentSurface = this.getSurfaceAt(this.vehicle.model.position.x, this.vehicle.model.position.y);
       const friction = getSurfaceFriction(this.currentSurface);
       this.vehicle.update(GAME_CONFIG.physicsStep, input, friction);
+
+      // Update bot physics
+      if (this.raceMode.inputEnabled) {
+        for (const bot of this.bots) {
+          const botSurface = this.getSurfaceAt(bot.model.position.x, bot.model.position.y);
+          const botFriction = getSurfaceFriction(botSurface);
+          bot.update(GAME_CONFIG.physicsStep, botFriction, checkpointList, leaderProgress);
+        }
+      }
+
       this.accumulator -= GAME_CONFIG.physicsStep;
 
       // Update drift score
@@ -231,13 +295,33 @@ export class Game {
       if (collected) {
         this.hud.triggerCheckpointFlash();
         if (this.checkpoints.isComplete()) {
+          this.playerFinished = true;
+          this.playerFinishTime = this.raceMode.raceTime;
           this.raceMode.finish();
+        }
+      }
+
+      // Bot checkpoint detection
+      for (const bot of this.bots) {
+        bot.checkCheckpoint(checkpointList, 80);
+        if (bot.isFinished(totalCheckpoints) && bot.finishTime === null) {
+          bot.finishTime = this.raceMode.raceTime;
         }
       }
     } else {
       // Still update checkpoint visuals (pulsing) even when not racing
       this.checkpoints.update(dt, new Vector2(-99999, -99999));
     }
+
+    // Update race standings
+    this.standings.update({
+      playerPosition: this.vehicle.model.position,
+      playerCheckpointIndex: this.checkpoints.getCurrentIndex(),
+      playerFinished: this.playerFinished,
+      playerFinishTime: this.playerFinishTime,
+      bots: this.bots,
+      checkpoints: checkpointList,
+    });
 
     // Collision detection
     const loadedChunks = this.worldManager.getLoadedChunks();
@@ -323,6 +407,9 @@ export class Game {
       countdownValue: this.raceMode.countdownValue,
       bestTime: this.raceMode.bestTime !== null ? this.raceMode.formatTime(this.raceMode.bestTime) : null,
       arrowAngle,
+      playerPosition: this.standings.getPlayerPosition(),
+      totalRacers: this.bots.length + 1,
+      standings: this.standings.getStandings(),
     }, dt);
 
     // Update audio
