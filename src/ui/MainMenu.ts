@@ -234,9 +234,7 @@ export class MainMenu {
   }
 
   private handleStoryMode(): void {
-    this.toastTimer = 1.5;
-    this.toastText.visible = true;
-    this.toastText.alpha = 1;
+    this.callbacks.onStoryMode();
   }
 
   showControls(): void {

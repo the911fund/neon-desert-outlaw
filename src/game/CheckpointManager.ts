@@ -27,16 +27,6 @@ export class CheckpointManager {
   }
 
   generateCircuit(): void {
-    // Clear previous
-    this.container.removeChildren();
-    this.graphics = [];
-    this.checkpoints = [];
-    this.currentIndex = 0;
-
-    // Place 10 checkpoints in a rough loop circuit around spawn (0,0).
-    // The main road runs roughly along y = mainRoadY(x).
-    // We lay checkpoints along a circuit that goes right along the road,
-    // veers into the desert, loops back left, and returns.
     const waypoints: [number, number][] = [
       [400, 0],       // 1: right on road
       [1000, -60],    // 2: further right on road
@@ -49,6 +39,15 @@ export class CheckpointManager {
       [-600, 0],      // 9: west on road
       [-200, 200],    // 10: loop back to start area
     ];
+    this.generateFromPositions(waypoints);
+  }
+
+  generateFromPositions(waypoints: [number, number][]): void {
+    // Clear previous
+    this.container.removeChildren();
+    this.graphics = [];
+    this.checkpoints = [];
+    this.currentIndex = 0;
 
     for (let i = 0; i < waypoints.length; i++) {
       const [x, y] = waypoints[i];

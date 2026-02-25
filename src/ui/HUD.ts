@@ -87,6 +87,23 @@ export class HUD {
   // Finish standings for overlay
   private overlayStandingsTexts: Text[] = [];
 
+  // Story mode elements
+  private missionTitleText: Text;
+  private chapterTitleText: Text;
+  private objectiveText: Text;
+  private missionTitleAlpha = 0;
+  private chapterTitleAlpha = 0;
+  private missionTitleTimer = 0;
+  private chapterTitleTimer = 0;
+  private storyOverlayContainer: Container;
+  private storyOverlayBg: Graphics;
+  private storyOverlayTitle: Text;
+  private storyOverlaySubtitle: Text;
+  private storyFailedContainer: Container;
+  private storyFailedBg: Graphics;
+  private storyFailedTitle: Text;
+  private storyFailedHint: Text;
+
   private readonly neonCyan = 0x00ffff;
   private readonly neonMagenta = 0xff00ff;
   private readonly panelBg = 0x0a0a0a;
@@ -149,6 +166,64 @@ export class HUD {
       this.overlayStandingsTexts.push(text);
     }
 
+    // Story mode HUD elements
+    this.missionTitleText = new Text({ text: '', style: new TextStyle({
+      fontFamily: 'monospace', fontSize: 36, fontWeight: 'bold',
+      fill: this.neonCyan,
+      dropShadow: { color: this.neonCyan, blur: 12, distance: 0 },
+    })});
+    this.missionTitleText.anchor.set(0.5, 0.5);
+    this.missionTitleText.visible = false;
+
+    this.chapterTitleText = new Text({ text: '', style: new TextStyle({
+      fontFamily: 'monospace', fontSize: 20, fill: this.neonMagenta,
+      dropShadow: { color: this.neonMagenta, blur: 8, distance: 0 },
+    })});
+    this.chapterTitleText.anchor.set(0.5, 0.5);
+    this.chapterTitleText.visible = false;
+
+    this.objectiveText = new Text({ text: '', style: new TextStyle({
+      fontFamily: 'monospace', fontSize: 16, fill: 0xcccccc,
+    })});
+    this.objectiveText.anchor.set(0.5, 0);
+    this.objectiveText.visible = false;
+
+    // Story completion overlay
+    this.storyOverlayContainer = new Container();
+    this.storyOverlayContainer.visible = false;
+    this.storyOverlayBg = new Graphics();
+    this.storyOverlayTitle = new Text({ text: '', style: new TextStyle({
+      fontFamily: 'monospace', fontSize: 48, fontWeight: 'bold',
+      fill: this.neonCyan,
+      dropShadow: { color: this.neonCyan, blur: 16, distance: 0 },
+    })});
+    this.storyOverlayTitle.anchor.set(0.5, 0.5);
+    this.storyOverlaySubtitle = new Text({ text: '', style: new TextStyle({
+      fontFamily: 'monospace', fontSize: 20, fill: 0xcccccc,
+    })});
+    this.storyOverlaySubtitle.anchor.set(0.5, 0.5);
+    this.storyOverlayContainer.addChild(this.storyOverlayBg);
+    this.storyOverlayContainer.addChild(this.storyOverlayTitle);
+    this.storyOverlayContainer.addChild(this.storyOverlaySubtitle);
+
+    // Story failed overlay
+    this.storyFailedContainer = new Container();
+    this.storyFailedContainer.visible = false;
+    this.storyFailedBg = new Graphics();
+    this.storyFailedTitle = new Text({ text: 'MISSION FAILED', style: new TextStyle({
+      fontFamily: 'monospace', fontSize: 48, fontWeight: 'bold',
+      fill: 0xff4444,
+      dropShadow: { color: 0xff4444, blur: 16, distance: 0 },
+    })});
+    this.storyFailedTitle.anchor.set(0.5, 0.5);
+    this.storyFailedHint = new Text({ text: 'Press ENTER to retry  |  ESC for menu', style: new TextStyle({
+      fontFamily: 'monospace', fontSize: 18, fill: 0x999999,
+    })});
+    this.storyFailedHint.anchor.set(0.5, 0.5);
+    this.storyFailedContainer.addChild(this.storyFailedBg);
+    this.storyFailedContainer.addChild(this.storyFailedTitle);
+    this.storyFailedContainer.addChild(this.storyFailedHint);
+
     this.setupSpeedDisplay();
     this.setupRPMDisplay();
     this.setupDriftDisplay();
@@ -169,6 +244,11 @@ export class HUD {
     this.container.addChild(this.overlayContainer);
     this.container.addChild(this.countdownText);
     this.container.addChild(this.soundHintText);
+    this.container.addChild(this.missionTitleText);
+    this.container.addChild(this.chapterTitleText);
+    this.container.addChild(this.objectiveText);
+    this.container.addChild(this.storyOverlayContainer);
+    this.container.addChild(this.storyFailedContainer);
 
     // Initially hide drift display
     this.driftContainer.visible = false;
@@ -777,6 +857,78 @@ export class HUD {
     this.drawSurfaceIcon(state.surfaceType);
   }
 
+  /** Show mission title with fade in/out at center screen. */
+  showMissionTitle(title: string): void {
+    this.missionTitleText.text = title;
+    this.missionTitleAlpha = 1;
+    this.missionTitleTimer = 2.5; // total display time
+    this.missionTitleText.visible = true;
+  }
+
+  /** Show chapter title with fade in/out above mission title. */
+  showChapterTitle(chapter: number, title: string): void {
+    this.chapterTitleText.text = `Chapter ${chapter}: ${title}`;
+    this.chapterTitleAlpha = 1;
+    this.chapterTitleTimer = 3.0;
+    this.chapterTitleText.visible = true;
+  }
+
+  /** Update objective text shown below timer area. */
+  updateObjective(text: string): void {
+    this.objectiveText.text = text;
+    this.objectiveText.visible = text.length > 0;
+  }
+
+  /** Show mission failed overlay. */
+  showFailed(visible: boolean): void {
+    this.storyFailedContainer.visible = visible;
+  }
+
+  /** Show story finale overlay. */
+  showFinale(visible: boolean): void {
+    this.storyOverlayContainer.visible = visible;
+    if (visible) {
+      this.storyOverlayTitle.text = 'YOU ARE THE\nNEON DESERT OUTLAW';
+      this.storyOverlaySubtitle.text = 'Press ESC to return to menu';
+    }
+  }
+
+  /** Update story-specific HUD animations each frame. */
+  updateStory(dt: number): void {
+    // Mission title fade
+    if (this.missionTitleTimer > 0) {
+      this.missionTitleTimer -= dt;
+      if (this.missionTitleTimer < 0.5) {
+        this.missionTitleAlpha = Math.max(0, this.missionTitleTimer / 0.5);
+      }
+      this.missionTitleText.alpha = this.missionTitleAlpha;
+      if (this.missionTitleTimer <= 0) {
+        this.missionTitleText.visible = false;
+      }
+    }
+
+    // Chapter title fade
+    if (this.chapterTitleTimer > 0) {
+      this.chapterTitleTimer -= dt;
+      if (this.chapterTitleTimer < 0.5) {
+        this.chapterTitleAlpha = Math.max(0, this.chapterTitleTimer / 0.5);
+      }
+      this.chapterTitleText.alpha = this.chapterTitleAlpha;
+      if (this.chapterTitleTimer <= 0) {
+        this.chapterTitleText.visible = false;
+      }
+    }
+  }
+
+  /** Hide all story-specific HUD elements. */
+  hideStoryElements(): void {
+    this.missionTitleText.visible = false;
+    this.chapterTitleText.visible = false;
+    this.objectiveText.visible = false;
+    this.storyOverlayContainer.visible = false;
+    this.storyFailedContainer.visible = false;
+  }
+
   setPosition(screenWidth: number, screenHeight: number): void {
     // Drift display at bottom center
     this.driftContainer.position.set(screenWidth / 2, screenHeight - 100);
@@ -801,5 +953,25 @@ export class HUD {
 
     // Standings below position
     this.standingsContainer.position.set(screenWidth - 280, 90);
+
+    // Story HUD positions
+    this.missionTitleText.position.set(screenWidth / 2, screenHeight / 2);
+    this.chapterTitleText.position.set(screenWidth / 2, screenHeight / 2 - 50);
+    this.objectiveText.position.set(screenWidth / 2, 90);
+
+    // Story overlays
+    this.storyOverlayBg.clear();
+    this.storyOverlayBg.beginFill(0x000000, 0.7);
+    this.storyOverlayBg.drawRect(0, 0, screenWidth, screenHeight);
+    this.storyOverlayBg.endFill();
+    this.storyOverlayTitle.position.set(screenWidth / 2, screenHeight / 2 - 30);
+    this.storyOverlaySubtitle.position.set(screenWidth / 2, screenHeight / 2 + 50);
+
+    this.storyFailedBg.clear();
+    this.storyFailedBg.beginFill(0x000000, 0.7);
+    this.storyFailedBg.drawRect(0, 0, screenWidth, screenHeight);
+    this.storyFailedBg.endFill();
+    this.storyFailedTitle.position.set(screenWidth / 2, screenHeight / 2 - 20);
+    this.storyFailedHint.position.set(screenWidth / 2, screenHeight / 2 + 40);
   }
 }

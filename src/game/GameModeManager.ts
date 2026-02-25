@@ -2,6 +2,7 @@ export enum GameMode {
   MENU = 'MENU',
   PLAYING = 'PLAYING',
   CONTROLS = 'CONTROLS',
+  STORY = 'STORY',
 }
 
 export type ModeChangeHandler = (mode: GameMode) => void;
@@ -29,6 +30,11 @@ export class GameModeManager {
   /** Convenience: transition to PLAYING (quick race). */
   startQuickRace(): void {
     this.setMode(GameMode.PLAYING);
+  }
+
+  /** Convenience: transition to STORY mode. */
+  startStory(): void {
+    this.setMode(GameMode.STORY);
   }
 
   /** Convenience: show controls overlay. */
