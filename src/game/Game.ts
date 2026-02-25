@@ -60,8 +60,13 @@ export class Game {
   private playerFinished = false;
   private playerFinishTime: number | null = null;
 
-  constructor(app: Application) {
+  private running = false;
+  private onExit: (() => void) | null;
+  private onEscKey: (e: KeyboardEvent) => void;
+
+  constructor(app: Application, onExit?: () => void) {
     this.app = app;
+    this.onExit = onExit ?? null;
     this.world = new Container();
     this.terrainLayer = new Container();
     this.trackLayer = new Container();
@@ -139,9 +144,67 @@ export class Game {
     window.addEventListener('click', startAudio);
     window.addEventListener('keydown', startAudio);
 
-    this.app.ticker.add(this.update);
+    // ESC handler for returning to menu
+    this.onEscKey = (e: KeyboardEvent): void => {
+      if (e.code === 'Escape' && this.running && this.onExit) {
+        this.onExit();
+      }
+    };
+    window.addEventListener('keydown', this.onEscKey);
+
     window.addEventListener('resize', this.handleResize);
     this.handleResize();
+
+    // Initially hidden — call start() to begin gameplay
+    this.setVisible(false);
+  }
+
+  /** Enter gameplay: reset state, show world, start ticker. */
+  start(): void {
+    if (this.running) return;
+    this.running = true;
+
+    // Reset vehicle
+    this.vehicle.model.position.set(0, 0);
+    this.vehicle.model.velocity.set(0, 0);
+    this.vehicle.model.heading = 0;
+    this.vehicle.model.yawRate = 0;
+
+    // Reset checkpoints, bots, standings
+    this.checkpoints.reset();
+    this.checkpoints.generateCircuit();
+    this.resetBots();
+    this.playerFinished = false;
+    this.playerFinishTime = null;
+    this.driftScore = 0;
+    this.accumulator = 0;
+    this.currentSurface = SurfaceType.Road;
+
+    // Skip TITLE — go straight to READY state
+    this.raceMode.state = RaceState.READY;
+    this.lastRaceState = RaceState.READY;
+
+    // Snap camera to origin
+    this.camera.snapTo(0, 0);
+
+    this.setVisible(true);
+    this.app.ticker.add(this.update);
+    this.handleResize();
+  }
+
+  /** Exit gameplay: stop ticker, hide world, reset state. */
+  stop(): void {
+    if (!this.running) return;
+    this.running = false;
+
+    this.app.ticker.remove(this.update);
+    this.setVisible(false);
+  }
+
+  private setVisible(visible: boolean): void {
+    this.world.visible = visible;
+    this.lighting.container.visible = visible;
+    this.uiContainer.visible = visible;
   }
 
   private createBots(): void {
