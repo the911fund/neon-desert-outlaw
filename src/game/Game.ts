@@ -4,6 +4,10 @@ import { GAME_CONFIG } from './GameConfig';
 import { InputManager } from './InputManager';
 import { Vehicle } from '../vehicle/Vehicle';
 import { SurfaceType, SurfaceColors, getSurfaceFriction } from '../physics/SurfaceTypes';
+import { Camera } from '../rendering/Camera';
+import { HUD } from '../ui/HUD';
+import { MiniMap } from '../ui/MiniMap';
+import { TouchControls } from '../ui/TouchControls';
 
 export class Game {
   private app: Application;
@@ -13,20 +17,46 @@ export class Game {
   private ground: Graphics;
   private accumulator = 0;
 
+  private camera: Camera;
+  private hud: HUD;
+  private miniMap: MiniMap;
+  private touchControls: TouchControls;
+  private uiContainer: Container;
+
   private surfaceGrid: SurfaceType[][] = [];
   private gridStartX = 0;
   private gridStartY = 0;
+  private currentSurface: SurfaceType = SurfaceType.Road;
+  private driftScore = 0;
 
   constructor(app: Application) {
     this.app = app;
     this.world = new Container();
     this.ground = new Graphics();
+    this.uiContainer = new Container();
 
     this.vehicle = new Vehicle();
     this.vehicle.model.position.set(0, 0);
 
+    // Initialize camera
+    this.camera = new Camera();
+    this.camera.setScreenSize(window.innerWidth, window.innerHeight);
+    this.camera.snapTo(0, 0);
+
+    // Initialize UI components
+    this.hud = new HUD();
+    this.miniMap = new MiniMap();
+    this.touchControls = new TouchControls();
+
+    // Add world elements
     this.world.addChild(this.ground, this.vehicle.container);
     this.app.stage.addChild(this.world);
+
+    // Add UI elements (on top of world)
+    this.uiContainer.addChild(this.hud.container);
+    this.uiContainer.addChild(this.miniMap.container);
+    this.uiContainer.addChild(this.touchControls.container);
+    this.app.stage.addChild(this.uiContainer);
 
     this.input = new InputManager();
 
@@ -40,6 +70,12 @@ export class Game {
 
   private handleResize = (): void => {
     this.app.renderer.resize(window.innerWidth, window.innerHeight);
+    this.camera.setScreenSize(window.innerWidth, window.innerHeight);
+
+    // Reposition UI elements
+    this.hud.setPosition(window.innerWidth, window.innerHeight);
+    this.miniMap.setPosition(window.innerWidth, window.innerHeight);
+    this.touchControls.setPosition(window.innerWidth, window.innerHeight);
   };
 
   private generateSurfaceGrid(): void {
@@ -109,16 +145,59 @@ export class Game {
       GAME_CONFIG.physicsStep * GAME_CONFIG.maxSubSteps
     );
 
+    // Get touch input and feed to input manager
+    const touchInput = this.touchControls.getInput();
+    this.input.setTouchInput(touchInput);
+
     while (this.accumulator >= GAME_CONFIG.physicsStep) {
       const input = this.input.getInput();
-      const surface = this.getSurfaceAt(this.vehicle.model.position.x, this.vehicle.model.position.y);
-      const friction = getSurfaceFriction(surface);
+      this.currentSurface = this.getSurfaceAt(this.vehicle.model.position.x, this.vehicle.model.position.y);
+      const friction = getSurfaceFriction(this.currentSurface);
       this.vehicle.update(GAME_CONFIG.physicsStep, input, friction);
       this.accumulator -= GAME_CONFIG.physicsStep;
+
+      // Update drift score
+      if (this.vehicle.driftPhase === 'Drifting') {
+        this.driftScore += GAME_CONFIG.physicsStep * this.vehicle.speed * 0.01;
+      } else if (this.vehicle.driftPhase === 'Normal') {
+        this.driftScore = 0;
+      }
     }
 
-    const centerX = this.app.renderer.width * 0.5;
-    const centerY = this.app.renderer.height * 0.5;
-    this.world.position.set(centerX - this.vehicle.model.position.x, centerY - this.vehicle.model.position.y);
+    // Update camera with look-ahead
+    const velocity = this.vehicle.model.velocity;
+    this.camera.update(
+      this.vehicle.model.position.x,
+      this.vehicle.model.position.y,
+      velocity.x,
+      velocity.y,
+      this.vehicle.speed
+    );
+
+    // Apply camera transform to world
+    this.camera.applyToContainer(this.world);
+
+    // Update HUD
+    this.hud.update({
+      speed: this.vehicle.speed,
+      engineForce: this.vehicle.engineForce,
+      driftPhase: this.vehicle.driftPhase,
+      driftScore: this.driftScore,
+      surfaceType: this.currentSurface,
+    });
+
+    // Update MiniMap
+    this.miniMap.update({
+      vehicleX: this.vehicle.model.position.x,
+      vehicleY: this.vehicle.model.position.y,
+      vehicleHeading: this.vehicle.model.heading,
+      chunks: [{
+        x: this.gridStartX,
+        y: this.gridStartY,
+        surfaceGrid: this.surfaceGrid,
+      }],
+      obstacles: [],
+      tileSize: GAME_CONFIG.tileSize,
+    });
   };
 }
