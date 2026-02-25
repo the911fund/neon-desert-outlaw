@@ -5,6 +5,9 @@ import { InputManager } from './InputManager';
 import { Vehicle } from '../vehicle/Vehicle';
 import { SurfaceType, getSurfaceFriction } from '../physics/SurfaceTypes';
 import { Camera } from '../rendering/Camera';
+import { LightingSystem } from '../rendering/LightingSystem';
+import { ParticleSystem } from '../rendering/ParticleSystem';
+import { BloomFilter } from '../rendering/BloomFilter';
 import { HUD } from '../ui/HUD';
 import { MiniMap } from '../ui/MiniMap';
 import type { MiniMapObstacle } from '../ui/MiniMap';
@@ -12,6 +15,7 @@ import { TouchControls } from '../ui/TouchControls';
 import { WorldManager } from '../world/WorldManager';
 import { CHUNK_SIZE, TILE_SIZE } from '../world/Chunk';
 import type { ObstacleType } from '../world/ObstacleFactory';
+import { Headlights } from '../vehicle/Headlights';
 
 export class Game {
   private app: Application;
@@ -19,7 +23,13 @@ export class Game {
   private vehicle: Vehicle;
   private world: Container;
   private terrainLayer: Container;
+  private trackLayer: Container;
+  private particleLayer: Container;
   private worldManager: WorldManager;
+  private lighting: LightingSystem;
+  private particles: ParticleSystem;
+  private bloom: BloomFilter;
+  private headlights: Headlights;
   private accumulator = 0;
 
   private camera: Camera;
@@ -35,6 +45,8 @@ export class Game {
     this.app = app;
     this.world = new Container();
     this.terrainLayer = new Container();
+    this.trackLayer = new Container();
+    this.particleLayer = new Container();
     this.uiContainer = new Container();
 
     this.vehicle = new Vehicle();
@@ -53,10 +65,23 @@ export class Game {
     this.touchControls = new TouchControls();
 
     // Add world elements
-    this.world.addChild(this.terrainLayer, this.vehicle.container);
+    this.world.addChild(this.terrainLayer, this.trackLayer, this.vehicle.container, this.particleLayer);
     this.app.stage.addChild(this.world);
 
-    // Add UI elements (on top of world)
+    this.bloom = new BloomFilter();
+    this.headlights = new Headlights();
+    this.lighting = new LightingSystem(this.app.renderer.width, this.app.renderer.height);
+    this.lighting.addLight(this.headlights.container);
+    this.bloom.applyTo(this.headlights.container, 0.8, 2);
+    this.app.stage.addChild(this.lighting.container);
+
+    this.particles = new ParticleSystem(this.particleLayer, {
+      bloom: this.bloom,
+      trackContainer: this.trackLayer,
+      particleContainer: this.particleLayer,
+    });
+
+    // Add UI elements (on top of world and lighting)
     this.uiContainer.addChild(this.hud.container);
     this.uiContainer.addChild(this.miniMap.container);
     this.uiContainer.addChild(this.touchControls.container);
@@ -72,6 +97,7 @@ export class Game {
   private handleResize = (): void => {
     this.app.renderer.resize(window.innerWidth, window.innerHeight);
     this.camera.setScreenSize(window.innerWidth, window.innerHeight);
+    this.lighting.resize(this.app.renderer.width, this.app.renderer.height);
 
     // Reposition UI elements
     this.hud.setPosition(window.innerWidth, window.innerHeight);
@@ -149,9 +175,6 @@ export class Game {
       }
     }
 
-    this.worldManager.update(this.vehicle.model.position.x, this.vehicle.model.position.y);
-
-    // Update camera with look-ahead
     const velocity = this.vehicle.model.velocity;
     this.camera.update(
       this.vehicle.model.position.x,
@@ -160,9 +183,29 @@ export class Game {
       velocity.y,
       this.vehicle.speed
     );
-
-    // Apply camera transform to world
     this.camera.applyToContainer(this.world);
+
+    const cameraPos = this.camera.position;
+    this.worldManager.update(cameraPos.x, cameraPos.y);
+
+    const debugInfo = this.vehicle.model.getDebugInfo();
+    this.particles.update(dt, {
+      position: this.vehicle.model.position,
+      heading: this.vehicle.model.heading,
+      velocity: this.vehicle.model.velocity,
+      speed: this.vehicle.model.speed,
+      driftPhase: this.vehicle.model.driftState.state,
+      driftRatio: debugInfo.driftRatio,
+      surface: this.currentSurface,
+    });
+
+    this.headlights.update({
+      position: this.vehicle.model.position,
+      heading: this.vehicle.model.heading,
+      speed: this.vehicle.model.speed,
+    });
+
+    this.lighting.update(dt, this.world.position, this.world.scale.x);
 
     // Update HUD
     this.hud.update({
