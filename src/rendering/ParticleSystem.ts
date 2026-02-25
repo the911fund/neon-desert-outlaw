@@ -6,7 +6,7 @@ import { ObjectPool } from '../utils/ObjectPool';
 import { Vector2 } from '../utils/Vector2';
 import type { BloomFilter } from './BloomFilter';
 
-type ParticleKind = 'track' | 'dust' | 'spray' | 'spark';
+type ParticleKind = 'track' | 'dust' | 'spray' | 'spark' | 'smoke';
 
 interface Particle {
   kind: ParticleKind;
@@ -56,10 +56,12 @@ export class ParticleSystem {
   private trackAccumulator = 0;
   private dustAccumulator = 0;
   private sprayAccumulator = 0;
+  private smokeAccumulator = 0;
 
   private readonly trackRate = 10;
   private readonly sandDustRate = 18;
   private readonly roadSprayRate = 6;
+  private readonly smokeRate = 14;
 
   private readonly trackColors = [0x00ffff, 0xff00ff, 0xff1493];
 
@@ -173,6 +175,17 @@ export class ParticleSystem {
       this.dustAccumulator = 0;
       this.sprayAccumulator = 0;
     }
+
+    // Tire smoke during drift
+    if (context.driftPhase === DriftPhase.Drifting || context.driftPhase === DriftPhase.Recovery) {
+      const intensity = context.driftPhase === DriftPhase.Drifting ? 1 : 0.4;
+      this.smokeAccumulator += dt * this.smokeRate * speedRatio * intensity;
+      const smokeCount = Math.floor(this.smokeAccumulator);
+      this.smokeAccumulator -= smokeCount;
+      this.emitTireSmoke(context, smokeCount, speedRatio);
+    } else {
+      this.smokeAccumulator = 0;
+    }
   }
 
   private emitTireTracks(position: Vector2, heading: number, driftIntensity: number): void {
@@ -259,6 +272,46 @@ export class ParticleSystem {
         radius,
         gravity: subtle ? -10 : -18,
         color,
+      });
+    }
+  }
+
+  private emitTireSmoke(context: ParticleContext, count: number, speedRatio: number): void {
+    if (count <= 0) return;
+
+    const heading = context.heading;
+    const backX = Math.cos(heading + Math.PI);
+    const backY = Math.sin(heading + Math.PI);
+    const sideX = Math.cos(heading + Math.PI / 2);
+    const sideY = Math.sin(heading + Math.PI / 2);
+
+    for (let i = 0; i < count; i += 1) {
+      // Emit from rear wheel area
+      const side = this.random() > 0.5 ? 1 : -1;
+      const spawnX = context.position.x + backX * 16 + sideX * side * 8;
+      const spawnY = context.position.y + backY * 16 + sideY * side * 8;
+
+      const speed = lerp(10, 30, this.random());
+      const lateral = (this.random() - 0.5) * 20;
+      const vx = backX * speed + sideX * lateral;
+      const vy = backY * speed + sideY * lateral - 8;
+
+      const radius = lerp(4, 9, this.random());
+      const lifetime = lerp(0.6, 1.4, this.random());
+      const opacity = lerp(0.15, 0.35, speedRatio);
+
+      this.spawnParticle({
+        kind: 'smoke',
+        position: new Vector2(spawnX, spawnY),
+        velocity: new Vector2(vx, vy),
+        rotation: 0,
+        lifetime,
+        baseAlpha: opacity,
+        width: 0,
+        length: 0,
+        radius,
+        gravity: -5,
+        color: 0xcccccc,
       });
     }
   }

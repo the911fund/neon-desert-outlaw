@@ -24,7 +24,8 @@ describe('ParticleSystem', () => {
 
     expect(system.getActiveCountByKind('track')).toBe(20);
     expect(system.getActiveCountByKind('dust')).toBe(27);
-    expect(system.getActiveCount()).toBe(47);
+    expect(system.getActiveCountByKind('smoke')).toBeGreaterThan(0);
+    expect(system.getActiveCount()).toBe(61);
   });
 
   it('recycles particles after lifetime expiry', () => {

@@ -11,6 +11,8 @@ export class InputManager {
   private keys = new Set<string>();
   private readonly target: Window;
   private touchInput: TouchInput | null = null;
+  private mutePressed = false;
+  private onMuteToggle: (() => void) | null = null;
 
   constructor(target: Window = window) {
     this.target = target;
@@ -18,12 +20,25 @@ export class InputManager {
     this.target.addEventListener('keyup', this.onKeyUp);
   }
 
+  setMuteToggleHandler(handler: () => void): void {
+    this.onMuteToggle = handler;
+  }
+
   private onKeyDown = (event: KeyboardEvent): void => {
     this.keys.add(event.code);
+
+    // M key for mute toggle (fire once per press)
+    if (event.code === 'KeyM' && !this.mutePressed) {
+      this.mutePressed = true;
+      this.onMuteToggle?.();
+    }
   };
 
   private onKeyUp = (event: KeyboardEvent): void => {
     this.keys.delete(event.code);
+    if (event.code === 'KeyM') {
+      this.mutePressed = false;
+    }
   };
 
   setTouchInput(input: TouchInput): void {
