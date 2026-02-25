@@ -1,54 +1,68 @@
-# AGENT TASK: Scaffold + Physics Engine
+# AGENT TASK: Full Integration
 
-You are building "Neon Desert Outlaw" - a high-fidelity 2D top-down driving game.
+This repo has a master branch with the scaffold + vehicle-hud already merged.
+Two feature branches still need to be merged and integrated:
 
-Read GAME_DESIGN.md and ARCHITECTURE.md in this repo for the full spec.
+- origin/feat/world-gen (procedural world generation)
+- origin/feat/lighting-particles (lighting, bloom, particles)
 
-YOUR TASK: Scaffold the project AND implement the physics engine + basic rendering.
+YOUR TASK:
 
-## Step 1: Project Scaffold
-- Initialize with npm: npm init -y, install PixiJS 8.x, TypeScript, Vite, ESLint, Vitest
-- Use npm (not pnpm/yarn)
-- Create the full directory structure from ARCHITECTURE.md
-- Configure: tsconfig.json (strict), vite.config.ts, eslint.config.js, vitest.config.ts
-- Create index.html entry point that loads the PixiJS app
-- GitHub Actions CI: lint + typecheck + build + test
+## Step 1: Merge both branches
+Run these commands:
+```
+git fetch origin
+git merge origin/feat/world-gen --no-edit
+```
+If there are conflicts (likely in src/game/Game.ts), resolve them by keeping ALL functionality from both sides. The Game.ts file needs to initialize and update ALL systems.
 
-## Step 2: Core Systems
-- src/utils/Vector2.ts - Full 2D vector math (add, sub, mul, dot, cross, normalize, rotate, lerp, angle, magnitude)
-- src/physics/BicycleModel.ts - Bicycle model vehicle physics:
-  - Front/rear axle positions
-  - Steering angle input to wheel direction
-  - Engine force + braking force
-  - Weight transfer under acceleration/braking
-  - Compute lateral/longitudinal forces per tire
-- src/physics/SurfaceTypes.ts - Surface enum + friction coefficients (Road=0.9, Sand=0.5, Gravel=0.65)
-- src/physics/DriftState.ts - State machine: Normal to Drifting to Recovery
-  - Transitions based on lateral force vs grip threshold
-  - Drift multiplier affects friction
-  - Counter-steer detection for recovery
+Then:
+```
+git merge origin/feat/lighting-particles --no-edit
+```
+Again resolve any conflicts by combining all code.
 
-## Step 3: Basic Rendering (prove it works)
-- src/main.ts - Bootstrap PixiJS Application
-- src/game/Game.ts - Game loop with fixed timestep physics (60Hz) + variable render
-- src/game/InputManager.ts - Keyboard input (WASD + arrows + space for handbrake)
-- src/vehicle/Vehicle.ts - Vehicle entity tying physics to a PixiJS sprite
-- Render a simple colored rectangle as the car for now
-- Draw surface type indicators (colored ground tiles)
-- The car MUST move with full bicycle model physics, not basic x/y
-- Drifting must visually show (rotation decoupled from velocity direction)
+## Step 2: Wire everything together in Game.ts
 
-## Step 4: Unit Tests
-- Vector2 math tests
-- BicycleModel: verify forces, steering response
-- DriftState: verify state transitions
-- SurfaceTypes: verify friction lookups
+The Game class must initialize and update ALL systems each frame:
+
+1. InputManager - read keyboard/touch input
+2. Vehicle physics (BicycleModel) - update with input + surface friction
+3. DriftState - check lateral force, transition states
+4. WorldManager - load/unload chunks based on camera position
+5. TerrainGenerator - provide surface type at vehicle position to physics
+6. ParticleSystem - emit particles based on vehicle state:
+   - Drift state = neon tire tracks
+   - Sand surface = dust clouds
+   - High speed on road = road spray
+7. LightingSystem - update ambient light (day/night cycle)
+8. Headlights - update position/rotation to match vehicle
+9. Camera - follow vehicle with look-ahead offset
+10. BloomFilter - apply to neon elements
+11. HUD - update speed, drift indicator, surface type
+12. MiniMap - update vehicle position, nearby chunks
+
+## Step 3: Render order in Game.ts
+1. World chunks (terrain + obstacles) — lowest layer
+2. Neon tire tracks (persist on ground)
+3. Vehicle with underglow
+4. Dust/spark particles
+5. Lighting overlay (darkness + light sources)
+6. Bloom post-processing
+7. HUD (fixed, on top)
+8. MiniMap (fixed, on top)
+
+## Step 4: Make sure surface type feeds physics
+- When vehicle moves, query WorldManager/TerrainGenerator for surface at vehicle position
+- Pass surface friction to BicycleModel
+- This is the critical gameplay loop: sand = slippery, road = grippy
+
+## Step 5: Verify everything
+- npm run typecheck must pass
+- npm test must pass (all existing tests)
+- npm run build must succeed
+- npm run dev should show: drivable car on procedural terrain with lighting and particles
 
 ## Deliverables
-- npm run dev opens browser with a drivable car using bicycle model physics
-- npm test passes all unit tests
-- npm run build produces production bundle
-- npm run lint and npm run typecheck pass clean
-
-When done: commit all changes, push the branch, create a PR with gh pr create --fill.
-Then run: openclaw system event --text "Done: scaffold + physics engine complete for neon-desert-outlaw" --mode now
+Commit the integration, push, create PR with gh pr create --fill.
+Then run: openclaw system event --text "Done: full integration complete - all systems wired" --mode now
