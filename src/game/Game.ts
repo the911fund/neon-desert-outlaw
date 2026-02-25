@@ -4,6 +4,10 @@ import { GAME_CONFIG } from './GameConfig';
 import { InputManager } from './InputManager';
 import { Vehicle } from '../vehicle/Vehicle';
 import { SurfaceType, SurfaceColors, getSurfaceFriction } from '../physics/SurfaceTypes';
+import { LightingSystem } from '../rendering/LightingSystem';
+import { ParticleSystem } from '../rendering/ParticleSystem';
+import { BloomFilter } from '../rendering/BloomFilter';
+import { Headlights } from '../vehicle/Headlights';
 
 export class Game {
   private app: Application;
@@ -11,6 +15,11 @@ export class Game {
   private vehicle: Vehicle;
   private world: Container;
   private ground: Graphics;
+  private particleLayer: Container;
+  private lighting: LightingSystem;
+  private particles: ParticleSystem;
+  private bloom: BloomFilter;
+  private headlights: Headlights;
   private accumulator = 0;
 
   private surfaceGrid: SurfaceType[][] = [];
@@ -21,17 +30,27 @@ export class Game {
     this.app = app;
     this.world = new Container();
     this.ground = new Graphics();
+    this.particleLayer = new Container();
 
     this.vehicle = new Vehicle();
     this.vehicle.model.position.set(0, 0);
 
-    this.world.addChild(this.ground, this.vehicle.container);
+    this.world.addChild(this.ground, this.particleLayer, this.vehicle.container);
     this.app.stage.addChild(this.world);
 
     this.input = new InputManager();
 
     this.generateSurfaceGrid();
     this.drawSurfaceGrid();
+
+    this.bloom = new BloomFilter();
+    this.headlights = new Headlights();
+    this.lighting = new LightingSystem(this.app.renderer.width, this.app.renderer.height);
+    this.lighting.addLight(this.headlights.container);
+    this.bloom.applyTo(this.headlights.container, 0.8, 2);
+    this.app.stage.addChild(this.lighting.container);
+
+    this.particles = new ParticleSystem(this.particleLayer, { bloom: this.bloom });
 
     this.app.ticker.add(this.update);
     window.addEventListener('resize', this.handleResize);
@@ -40,6 +59,7 @@ export class Game {
 
   private handleResize = (): void => {
     this.app.renderer.resize(window.innerWidth, window.innerHeight);
+    this.lighting.resize(this.app.renderer.width, this.app.renderer.height);
   };
 
   private generateSurfaceGrid(): void {
@@ -117,8 +137,28 @@ export class Game {
       this.accumulator -= GAME_CONFIG.physicsStep;
     }
 
+    const surface = this.getSurfaceAt(this.vehicle.model.position.x, this.vehicle.model.position.y);
+    const debugInfo = this.vehicle.model.getDebugInfo();
+    this.particles.update(dt, {
+      position: this.vehicle.model.position,
+      heading: this.vehicle.model.heading,
+      velocity: this.vehicle.model.velocity,
+      speed: this.vehicle.model.speed,
+      driftPhase: this.vehicle.model.driftState.state,
+      driftRatio: debugInfo.driftRatio,
+      surface,
+    });
+
+    this.headlights.update({
+      position: this.vehicle.model.position,
+      heading: this.vehicle.model.heading,
+      speed: this.vehicle.model.speed,
+    });
+
     const centerX = this.app.renderer.width * 0.5;
     const centerY = this.app.renderer.height * 0.5;
     this.world.position.set(centerX - this.vehicle.model.position.x, centerY - this.vehicle.model.position.y);
+
+    this.lighting.update(dt, this.world.position);
   };
 }
