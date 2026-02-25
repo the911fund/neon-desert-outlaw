@@ -24,6 +24,10 @@ import { CollisionSystem } from '../physics/CollisionSystem';
 import { Vector2 } from '../utils/Vector2';
 import { BotVehicle, BOT_COLORS } from '../ai/BotVehicle';
 import { BOT_PERSONALITIES } from '../ai/BotDriver';
+import { MissionManager } from '../story/Mission';
+import type { StoryState } from '../story/Mission';
+import { DialogueBox } from '../story/DialogueBox';
+import { STORY_MISSIONS } from '../story/StoryContent';
 
 export class Game {
   private app: Application;
@@ -63,6 +67,13 @@ export class Game {
   private running = false;
   private onExit: (() => void) | null;
   private onEscKey: (e: KeyboardEvent) => void;
+
+  // Story mode
+  private isStoryMode = false;
+  private missionManager: MissionManager;
+  private dialogue: DialogueBox;
+  private lastStoryState: StoryState = 'briefing';
+  private storyEnterHandler: (e: KeyboardEvent) => void;
 
   constructor(app: Application, onExit?: () => void) {
     this.app = app;
@@ -144,6 +155,25 @@ export class Game {
     window.addEventListener('click', startAudio);
     window.addEventListener('keydown', startAudio);
 
+    // Story mode systems
+    this.missionManager = new MissionManager();
+    this.dialogue = new DialogueBox();
+    this.app.stage.addChild(this.dialogue.container);
+
+    // Story mode: Enter key to retry on failure
+    this.storyEnterHandler = (e: KeyboardEvent): void => {
+      if (!this.running || !this.isStoryMode) return;
+      if (e.code === 'Enter') {
+        if (this.missionManager.state === 'failed') {
+          this.missionManager.retry();
+          this.launchCurrentMission();
+        } else if (this.missionManager.state === 'finale') {
+          if (this.onExit) this.onExit();
+        }
+      }
+    };
+    window.addEventListener('keydown', this.storyEnterHandler);
+
     // ESC handler for returning to menu
     this.onEscKey = (e: KeyboardEvent): void => {
       if (e.code === 'Escape' && this.running && this.onExit) {
@@ -199,6 +229,92 @@ export class Game {
 
     this.app.ticker.remove(this.update);
     this.setVisible(false);
+    this.dialogue.hide();
+    this.hud.hideStoryElements();
+    this.hud.showFailed(false);
+    this.hud.showFinale(false);
+    this.isStoryMode = false;
+  }
+
+  /** Enter story mode: initialize missions and start first/saved mission. */
+  startStory(): void {
+    if (this.running) return;
+    this.isStoryMode = true;
+    this.running = true;
+
+    this.missionManager.init(STORY_MISSIONS);
+    this.missionManager.startMission();
+
+    // Hide bots in story mode
+    for (const bot of this.bots) {
+      bot.container.visible = false;
+    }
+
+    this.setVisible(true);
+    this.app.ticker.add(this.update);
+    this.handleResize();
+    this.dialogue.resize(window.innerWidth, window.innerHeight);
+
+    this.launchCurrentMission();
+  }
+
+  private launchCurrentMission(): void {
+    const mission = this.missionManager.currentMission;
+    if (!mission) return;
+
+    // Reset vehicle
+    this.vehicle.model.position.set(0, 0);
+    this.vehicle.model.velocity.set(0, 0);
+    this.vehicle.model.heading = 0;
+    this.vehicle.model.yawRate = 0;
+    this.driftScore = 0;
+    this.accumulator = 0;
+    this.currentSurface = SurfaceType.Road;
+    this.camera.snapTo(0, 0);
+
+    // Setup checkpoints for this mission
+    this.checkpoints.reset();
+    this.checkpoints.generateFromPositions(mission.checkpoints);
+
+    // Reset race mode to RACING (skip countdown in story)
+    this.raceMode.state = RaceState.RACING;
+    this.raceMode.raceTime = 0;
+    this.lastRaceState = RaceState.RACING;
+
+    // Hide race overlays, show story HUD
+    this.hud.showFailed(false);
+    this.hud.showFinale(false);
+
+    // Show chapter title if new chapter
+    if (this.missionManager.newChapter) {
+      this.hud.showChapterTitle(mission.chapter, mission.chapterTitle);
+    }
+
+    // Show briefing dialogue
+    this.missionManager.startMission();
+    this.lastStoryState = 'briefing';
+    this.dialogue.show(mission.briefing, () => {
+      // Briefing finished — start playing
+      this.missionManager.beginPlaying();
+      this.hud.showMissionTitle(mission.title);
+    });
+  }
+
+  private onMissionComplete(): void {
+    const mission = this.missionManager.currentMission;
+    if (!mission) return;
+
+    // Show completion dialogue, then advance
+    this.dialogue.show(mission.completionDialogue, () => {
+      const hasMore = this.missionManager.advance();
+      if (hasMore) {
+        this.missionManager.startMission();
+        this.launchCurrentMission();
+      } else {
+        // All missions complete — show finale
+        this.hud.showFinale(true);
+      }
+    });
   }
 
   private setVisible(visible: boolean): void {
@@ -238,6 +354,7 @@ export class Game {
     this.hud.setPosition(window.innerWidth, window.innerHeight);
     this.miniMap.setPosition(window.innerWidth, window.innerHeight);
     this.touchControls.setPosition(window.innerWidth, window.innerHeight);
+    this.dialogue.resize(window.innerWidth, window.innerHeight);
   };
 
   private getSurfaceAt(x: number, y: number): SurfaceType {
@@ -325,7 +442,13 @@ export class Game {
     while (this.accumulator >= GAME_CONFIG.physicsStep) {
       // Only process vehicle input during racing
       const rawInput = this.input.getInput();
-      const input = this.raceMode.inputEnabled
+      const storyBlocked = this.isStoryMode && (
+        this.dialogue.isVisible
+        || this.missionManager.state === 'briefing'
+        || this.missionManager.state === 'failed'
+        || this.missionManager.state === 'finale'
+      );
+      const input = (this.raceMode.inputEnabled && !storyBlocked)
         ? rawInput
         : { throttle: 0, brake: 0, steer: 0, handbrake: 0 };
 
@@ -357,18 +480,37 @@ export class Game {
       const collected = this.checkpoints.update(dt, this.vehicle.model.position);
       if (collected) {
         this.hud.triggerCheckpointFlash();
-        if (this.checkpoints.isComplete()) {
+        if (!this.isStoryMode && this.checkpoints.isComplete()) {
           this.playerFinished = true;
           this.playerFinishTime = this.raceMode.raceTime;
           this.raceMode.finish();
         }
       }
 
-      // Bot checkpoint detection
-      for (const bot of this.bots) {
-        bot.checkCheckpoint(checkpointList, 80);
-        if (bot.isFinished(totalCheckpoints) && bot.finishTime === null) {
-          bot.finishTime = this.raceMode.raceTime;
+      // Bot checkpoint detection (not in story mode)
+      if (!this.isStoryMode) {
+        for (const bot of this.bots) {
+          bot.checkCheckpoint(checkpointList, 80);
+          if (bot.isFinished(totalCheckpoints) && bot.finishTime === null) {
+            bot.finishTime = this.raceMode.raceTime;
+          }
+        }
+      }
+
+      // Story mode mission objective checking
+      if (this.isStoryMode && this.missionManager.state === 'playing') {
+        const storyState = this.missionManager.update(
+          dt,
+          this.checkpoints.isComplete(),
+          this.currentSurface
+        );
+        if (storyState !== this.lastStoryState) {
+          this.lastStoryState = storyState;
+          if (storyState === 'complete') {
+            this.onMissionComplete();
+          } else if (storyState === 'failed') {
+            this.hud.showFailed(true);
+          }
         }
       }
     } else {
@@ -461,19 +603,58 @@ export class Game {
       arrowAngle = Math.atan2(dy, dx);
     }
 
-    this.hud.updateRace({
-      raceState: this.raceMode.state,
-      raceTime: this.raceMode.raceTime,
-      formattedTime: this.raceMode.formatTime(this.raceMode.raceTime),
-      checkpointCurrent: this.checkpoints.getCurrentIndex(),
-      checkpointTotal: this.checkpoints.getTotal(),
-      countdownValue: this.raceMode.countdownValue,
-      bestTime: this.raceMode.bestTime !== null ? this.raceMode.formatTime(this.raceMode.bestTime) : null,
-      arrowAngle,
-      playerPosition: this.standings.getPlayerPosition(),
-      totalRacers: this.bots.length + 1,
-      standings: this.standings.getStandings(),
-    }, dt);
+    // In story mode: show timer and checkpoints but suppress race overlays/standings
+    if (this.isStoryMode) {
+      const storyTime = this.missionManager.missionTime;
+      this.hud.updateRace({
+        raceState: this.missionManager.state === 'playing' ? RaceState.RACING : RaceState.READY,
+        raceTime: storyTime,
+        formattedTime: this.raceMode.formatTime(storyTime),
+        checkpointCurrent: this.checkpoints.getCurrentIndex(),
+        checkpointTotal: this.checkpoints.getTotal(),
+        countdownValue: 0,
+        bestTime: null,
+        arrowAngle,
+      }, dt);
+    } else {
+      this.hud.updateRace({
+        raceState: this.raceMode.state,
+        raceTime: this.raceMode.raceTime,
+        formattedTime: this.raceMode.formatTime(this.raceMode.raceTime),
+        checkpointCurrent: this.checkpoints.getCurrentIndex(),
+        checkpointTotal: this.checkpoints.getTotal(),
+        countdownValue: this.raceMode.countdownValue,
+        bestTime: this.raceMode.bestTime !== null ? this.raceMode.formatTime(this.raceMode.bestTime) : null,
+        arrowAngle,
+        playerPosition: this.standings.getPlayerPosition(),
+        totalRacers: this.bots.length + 1,
+        standings: this.standings.getStandings(),
+      }, dt);
+    }
+
+    // Story mode updates
+    if (this.isStoryMode) {
+      this.dialogue.update(dt);
+      this.hud.updateStory(dt);
+
+      // Update objective text
+      if (this.missionManager.state === 'playing') {
+        this.hud.updateObjective(this.missionManager.objectiveText);
+      } else {
+        this.hud.updateObjective('');
+      }
+
+      // Disable vehicle input during dialogue or failure/finale
+      const storyInputBlocked = this.dialogue.isVisible
+        || this.missionManager.state === 'briefing'
+        || this.missionManager.state === 'failed'
+        || this.missionManager.state === 'finale';
+
+      if (storyInputBlocked) {
+        this.vehicle.model.velocity.set(0, 0);
+        this.vehicle.model.yawRate = 0;
+      }
+    }
 
     // Update audio
     this.audio.update({

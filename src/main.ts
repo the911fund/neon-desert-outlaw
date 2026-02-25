@@ -23,9 +23,7 @@ app
 
     const menu = new MainMenu({
       onQuickRace: () => modeManager.startQuickRace(),
-      onStoryMode: () => {
-        // Handled by MainMenu itself (shows "Coming Soon" toast)
-      },
+      onStoryMode: () => modeManager.startStory(),
       onControls: () => modeManager.showControls(),
     });
 
@@ -47,6 +45,10 @@ app
         case GameMode.PLAYING:
           menu.container.visible = false;
           game.start();
+          break;
+        case GameMode.STORY:
+          menu.container.visible = false;
+          game.startStory();
           break;
         case GameMode.CONTROLS:
           menu.showControls();
