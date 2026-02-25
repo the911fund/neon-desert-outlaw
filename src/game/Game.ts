@@ -1,20 +1,35 @@
-import { Container, Graphics } from 'pixi.js';
+import { Container } from 'pixi.js';
 import type { Application } from 'pixi.js';
 import { GAME_CONFIG } from './GameConfig';
 import { InputManager } from './InputManager';
 import { Vehicle } from '../vehicle/Vehicle';
-import { SurfaceType, SurfaceColors, getSurfaceFriction } from '../physics/SurfaceTypes';
+import { SurfaceType, getSurfaceFriction } from '../physics/SurfaceTypes';
 import { Camera } from '../rendering/Camera';
+import { LightingSystem } from '../rendering/LightingSystem';
+import { ParticleSystem } from '../rendering/ParticleSystem';
+import { BloomFilter } from '../rendering/BloomFilter';
 import { HUD } from '../ui/HUD';
 import { MiniMap } from '../ui/MiniMap';
+import type { MiniMapObstacle } from '../ui/MiniMap';
 import { TouchControls } from '../ui/TouchControls';
+import { WorldManager } from '../world/WorldManager';
+import { CHUNK_SIZE, TILE_SIZE } from '../world/Chunk';
+import type { ObstacleType } from '../world/ObstacleFactory';
+import { Headlights } from '../vehicle/Headlights';
 
 export class Game {
   private app: Application;
   private input: InputManager;
   private vehicle: Vehicle;
   private world: Container;
-  private ground: Graphics;
+  private terrainLayer: Container;
+  private trackLayer: Container;
+  private particleLayer: Container;
+  private worldManager: WorldManager;
+  private lighting: LightingSystem;
+  private particles: ParticleSystem;
+  private bloom: BloomFilter;
+  private headlights: Headlights;
   private accumulator = 0;
 
   private camera: Camera;
@@ -23,20 +38,21 @@ export class Game {
   private touchControls: TouchControls;
   private uiContainer: Container;
 
-  private surfaceGrid: SurfaceType[][] = [];
-  private gridStartX = 0;
-  private gridStartY = 0;
   private currentSurface: SurfaceType = SurfaceType.Road;
   private driftScore = 0;
 
   constructor(app: Application) {
     this.app = app;
     this.world = new Container();
-    this.ground = new Graphics();
+    this.terrainLayer = new Container();
+    this.trackLayer = new Container();
+    this.particleLayer = new Container();
     this.uiContainer = new Container();
 
     this.vehicle = new Vehicle();
     this.vehicle.model.position.set(0, 0);
+
+    this.worldManager = new WorldManager(this.terrainLayer, { seed: GAME_CONFIG.worldSeed });
 
     // Initialize camera
     this.camera = new Camera();
@@ -49,19 +65,29 @@ export class Game {
     this.touchControls = new TouchControls();
 
     // Add world elements
-    this.world.addChild(this.ground, this.vehicle.container);
+    this.world.addChild(this.terrainLayer, this.trackLayer, this.vehicle.container, this.particleLayer);
     this.app.stage.addChild(this.world);
 
-    // Add UI elements (on top of world)
+    this.bloom = new BloomFilter();
+    this.headlights = new Headlights();
+    this.lighting = new LightingSystem(this.app.renderer.width, this.app.renderer.height);
+    this.lighting.addLight(this.headlights.container);
+    this.bloom.applyTo(this.headlights.container, 0.8, 2);
+    this.app.stage.addChild(this.lighting.container);
+
+    this.particles = new ParticleSystem(this.particleLayer, {
+      bloom: this.bloom,
+      trackContainer: this.trackLayer,
+      particleContainer: this.particleLayer,
+    });
+
+    // Add UI elements (on top of world and lighting)
     this.uiContainer.addChild(this.hud.container);
     this.uiContainer.addChild(this.miniMap.container);
     this.uiContainer.addChild(this.touchControls.container);
     this.app.stage.addChild(this.uiContainer);
 
     this.input = new InputManager();
-
-    this.generateSurfaceGrid();
-    this.drawSurfaceGrid();
 
     this.app.ticker.add(this.update);
     window.addEventListener('resize', this.handleResize);
@@ -71,6 +97,7 @@ export class Game {
   private handleResize = (): void => {
     this.app.renderer.resize(window.innerWidth, window.innerHeight);
     this.camera.setScreenSize(window.innerWidth, window.innerHeight);
+    this.lighting.resize(this.app.renderer.width, this.app.renderer.height);
 
     // Reposition UI elements
     this.hud.setPosition(window.innerWidth, window.innerHeight);
@@ -78,64 +105,48 @@ export class Game {
     this.touchControls.setPosition(window.innerWidth, window.innerHeight);
   };
 
-  private generateSurfaceGrid(): void {
-    const size = GAME_CONFIG.gridRadius * 2 + 1;
-    this.surfaceGrid = [];
-    this.gridStartX = -GAME_CONFIG.gridRadius * GAME_CONFIG.tileSize;
-    this.gridStartY = -GAME_CONFIG.gridRadius * GAME_CONFIG.tileSize;
-
-    for (let y = 0; y < size; y += 1) {
-      const row: SurfaceType[] = [];
-      for (let x = 0; x < size; x += 1) {
-        const worldY = y - GAME_CONFIG.gridRadius;
-        if (Math.abs(worldY) <= 1) {
-          row.push(SurfaceType.Road);
-          continue;
-        }
-        const noise = Math.abs(Math.sin((x + 11) * 12.9898 + (y + 7) * 78.233 + GAME_CONFIG.worldSeed));
-        if (noise < 0.33) {
-          row.push(SurfaceType.Sand);
-        } else if (noise < 0.66) {
-          row.push(SurfaceType.Gravel);
-        } else {
-          row.push(SurfaceType.Sand);
-        }
-      }
-      this.surfaceGrid.push(row);
-    }
-  }
-
-  private drawSurfaceGrid(): void {
-    this.ground.clear();
-    const size = GAME_CONFIG.gridRadius * 2 + 1;
-    for (let y = 0; y < size; y += 1) {
-      for (let x = 0; x < size; x += 1) {
-        const tile = this.surfaceGrid[y][x];
-        const color = SurfaceColors[tile];
-        this.ground.beginFill(color);
-        this.ground.drawRect(
-          this.gridStartX + x * GAME_CONFIG.tileSize,
-          this.gridStartY + y * GAME_CONFIG.tileSize,
-          GAME_CONFIG.tileSize,
-          GAME_CONFIG.tileSize
-        );
-        this.ground.endFill();
-      }
-    }
-  }
-
   private getSurfaceAt(x: number, y: number): SurfaceType {
-    const localX = Math.floor((x - this.gridStartX) / GAME_CONFIG.tileSize);
-    const localY = Math.floor((y - this.gridStartY) / GAME_CONFIG.tileSize);
-    if (
-      localX < 0 ||
-      localY < 0 ||
-      localX >= this.surfaceGrid.length ||
-      localY >= this.surfaceGrid.length
-    ) {
-      return SurfaceType.Sand;
+    return this.worldManager.getSurfaceAt(x, y);
+  }
+
+  private mapObstacleType(type: ObstacleType): MiniMapObstacle['type'] | null {
+    switch (type) {
+      case 'rock':
+        return 'rock';
+      case 'deadTree':
+      case 'cactus':
+        return 'tree';
+      case 'wreck':
+        return 'wreck';
+      case 'outpostFuel':
+      case 'outpostRest':
+        return 'outpost';
+      default:
+        return null;
     }
-    return this.surfaceGrid[localY][localX];
+  }
+
+  private collectMiniMapObstacles(): MiniMapObstacle[] {
+    const obstacles: MiniMapObstacle[] = [];
+    const chunks = this.worldManager.getLoadedChunks();
+
+    for (const chunk of chunks) {
+      const originX = chunk.chunkX * CHUNK_SIZE;
+      const originY = chunk.chunkY * CHUNK_SIZE;
+
+      for (const obstacle of chunk.obstacles) {
+        const mapped = this.mapObstacleType(obstacle.type);
+        if (!mapped) continue;
+
+        obstacles.push({
+          x: originX + obstacle.localX,
+          y: originY + obstacle.localY,
+          type: mapped,
+        });
+      }
+    }
+
+    return obstacles;
   }
 
   private update = (): void => {
@@ -164,7 +175,6 @@ export class Game {
       }
     }
 
-    // Update camera with look-ahead
     const velocity = this.vehicle.model.velocity;
     this.camera.update(
       this.vehicle.model.position.x,
@@ -173,9 +183,29 @@ export class Game {
       velocity.y,
       this.vehicle.speed
     );
-
-    // Apply camera transform to world
     this.camera.applyToContainer(this.world);
+
+    const cameraPos = this.camera.position;
+    this.worldManager.update(cameraPos.x, cameraPos.y);
+
+    const debugInfo = this.vehicle.model.getDebugInfo();
+    this.particles.update(dt, {
+      position: this.vehicle.model.position,
+      heading: this.vehicle.model.heading,
+      velocity: this.vehicle.model.velocity,
+      speed: this.vehicle.model.speed,
+      driftPhase: this.vehicle.model.driftState.state,
+      driftRatio: debugInfo.driftRatio,
+      surface: this.currentSurface,
+    });
+
+    this.headlights.update({
+      position: this.vehicle.model.position,
+      heading: this.vehicle.model.heading,
+      speed: this.vehicle.model.speed,
+    });
+
+    this.lighting.update(dt, this.world.position, this.world.scale.x);
 
     // Update HUD
     this.hud.update({
@@ -187,17 +217,19 @@ export class Game {
     });
 
     // Update MiniMap
+    const chunks = this.worldManager.getLoadedChunks().map(chunk => ({
+      x: chunk.chunkX * CHUNK_SIZE,
+      y: chunk.chunkY * CHUNK_SIZE,
+      surfaceGrid: chunk.terrain,
+    }));
+
     this.miniMap.update({
       vehicleX: this.vehicle.model.position.x,
       vehicleY: this.vehicle.model.position.y,
       vehicleHeading: this.vehicle.model.heading,
-      chunks: [{
-        x: this.gridStartX,
-        y: this.gridStartY,
-        surfaceGrid: this.surfaceGrid,
-      }],
-      obstacles: [],
-      tileSize: GAME_CONFIG.tileSize,
+      chunks,
+      obstacles: this.collectMiniMapObstacles(),
+      tileSize: TILE_SIZE,
     });
   };
 }
