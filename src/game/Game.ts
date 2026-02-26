@@ -15,6 +15,7 @@ import { HUD } from '../ui/HUD';
 import { MiniMap } from '../ui/MiniMap';
 import type { MiniMapObstacle } from '../ui/MiniMap';
 import { TouchControls } from '../ui/TouchControls';
+import { MusicControls } from '../ui/MusicControls';
 import { WorldManager } from '../world/WorldManager';
 import { CHUNK_SIZE, TILE_SIZE } from '../world/Chunk';
 import type { ObstacleType } from '../world/ObstacleFactory';
@@ -52,6 +53,7 @@ export class Game {
   private hud: HUD;
   private miniMap: MiniMap;
   private touchControls: TouchControls;
+  private musicControls: MusicControls;
   private uiContainer: Container;
 
   private currentSurface: SurfaceType = SurfaceType.Road;
@@ -98,6 +100,20 @@ export class Game {
     this.hud = new HUD();
     this.miniMap = new MiniMap();
     this.touchControls = new TouchControls();
+    this.musicControls = new MusicControls(
+      () => {
+        this.audio.previousTrack();
+        this.syncMusicControls();
+      },
+      () => {
+        this.audio.toggleMusicPlayback();
+        this.syncMusicControls();
+      },
+      () => {
+        this.audio.nextTrack();
+        this.syncMusicControls();
+      },
+    );
 
     this.bloom = new BloomFilter();
 
@@ -137,6 +153,7 @@ export class Game {
     this.uiContainer.addChild(this.hud.container);
     this.uiContainer.addChild(this.miniMap.container);
     this.uiContainer.addChild(this.touchControls.container);
+    this.uiContainer.addChild(this.musicControls.container);
     this.app.stage.addChild(this.uiContainer);
 
     this.input = new InputManager();
@@ -154,6 +171,7 @@ export class Game {
     };
     window.addEventListener('click', startAudio);
     window.addEventListener('keydown', startAudio);
+    this.syncMusicControls();
 
     // Story mode systems
     this.missionManager = new MissionManager();
@@ -354,8 +372,16 @@ export class Game {
     this.hud.setPosition(window.innerWidth, window.innerHeight);
     this.miniMap.setPosition(window.innerWidth, window.innerHeight);
     this.touchControls.setPosition(window.innerWidth, window.innerHeight);
+    this.musicControls.setPosition(window.innerWidth);
     this.dialogue.resize(window.innerWidth, window.innerHeight);
   };
+
+  private syncMusicControls(): void {
+    this.musicControls.setState({
+      trackName: this.audio.musicTrackName,
+      isPlaying: this.audio.musicPlaying,
+    });
+  }
 
   private getSurfaceAt(x: number, y: number): SurfaceType {
     return this.worldManager.getSurfaceAt(x, y);
@@ -679,6 +705,7 @@ export class Game {
       surface: this.currentSurface,
       isBraking: this.input.getInput().brake > 0,
     });
+    this.syncMusicControls();
 
     // Update MiniMap
     const chunks = this.worldManager.getLoadedChunks().map(chunk => ({
