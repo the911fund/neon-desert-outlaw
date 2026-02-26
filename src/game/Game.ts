@@ -15,6 +15,7 @@ import { HUD } from '../ui/HUD';
 import { MiniMap } from '../ui/MiniMap';
 import type { MiniMapObstacle } from '../ui/MiniMap';
 import { TouchControls } from '../ui/TouchControls';
+import { MusicControls } from '../ui/MusicControls';
 import { WorldManager } from '../world/WorldManager';
 import { CHUNK_SIZE, TILE_SIZE } from '../world/Chunk';
 import type { ObstacleType } from '../world/ObstacleFactory';
@@ -52,6 +53,7 @@ export class Game {
   private hud: HUD;
   private miniMap: MiniMap;
   private touchControls: TouchControls;
+  private musicControls: MusicControls;
   private uiContainer: Container;
 
   private currentSurface: SurfaceType = SurfaceType.Road;
@@ -74,6 +76,12 @@ export class Game {
   private dialogue: DialogueBox;
   private lastStoryState: StoryState = 'briefing';
   private storyEnterHandler: (e: KeyboardEvent) => void;
+  private readonly startingGrid = [
+    new Vector2(-40, 0),
+    new Vector2(-95, -34),
+    new Vector2(-95, 34),
+    new Vector2(-150, 0),
+  ];
 
   constructor(app: Application, onExit?: () => void) {
     this.app = app;
@@ -98,6 +106,20 @@ export class Game {
     this.hud = new HUD();
     this.miniMap = new MiniMap();
     this.touchControls = new TouchControls();
+    this.musicControls = new MusicControls(
+      () => {
+        this.audio.previousTrack();
+        this.syncMusicControls();
+      },
+      () => {
+        this.audio.toggleMusicPlayback();
+        this.syncMusicControls();
+      },
+      () => {
+        this.audio.nextTrack();
+        this.syncMusicControls();
+      },
+    );
 
     this.bloom = new BloomFilter();
 
@@ -137,6 +159,7 @@ export class Game {
     this.uiContainer.addChild(this.hud.container);
     this.uiContainer.addChild(this.miniMap.container);
     this.uiContainer.addChild(this.touchControls.container);
+    this.uiContainer.addChild(this.musicControls.container);
     this.app.stage.addChild(this.uiContainer);
 
     this.input = new InputManager();
@@ -154,6 +177,7 @@ export class Game {
     };
     window.addEventListener('click', startAudio);
     window.addEventListener('keydown', startAudio);
+    this.syncMusicControls();
 
     // Story mode systems
     this.missionManager = new MissionManager();
@@ -194,16 +218,12 @@ export class Game {
     if (this.running) return;
     this.running = true;
 
-    // Reset vehicle
-    this.vehicle.model.position.set(0, 0);
-    this.vehicle.model.velocity.set(0, 0);
-    this.vehicle.model.heading = 0;
-    this.vehicle.model.yawRate = 0;
+    this.resetPlayer(this.startingGrid[0], 0);
 
     // Reset checkpoints, bots, standings
     this.checkpoints.reset();
     this.checkpoints.generateCircuit();
-    this.resetBots();
+    this.resetBots(this.startingGrid.slice(1));
     this.playerFinished = false;
     this.playerFinishTime = null;
     this.driftScore = 0;
@@ -214,8 +234,8 @@ export class Game {
     this.raceMode.state = RaceState.READY;
     this.lastRaceState = RaceState.READY;
 
-    // Snap camera to origin
-    this.camera.snapTo(0, 0);
+    // Snap camera to starting grid
+    this.camera.snapTo(this.vehicle.model.position.x, this.vehicle.model.position.y);
 
     this.setVisible(true);
     this.app.ticker.add(this.update);
@@ -331,16 +351,14 @@ export class Game {
     this.resetBots();
   }
 
-  private resetBots(): void {
-    // Spawn bots in a staggered grid behind and beside the player
-    const spawnOffsets = [
+  private resetBots(spawnOffsets?: Vector2[]): void {
+    const offsets = spawnOffsets ?? [
       new Vector2(-60, -30),
       new Vector2(-60, 30),
       new Vector2(-120, 0),
     ];
-
     for (let i = 0; i < this.bots.length; i++) {
-      const offset = spawnOffsets[i] ?? new Vector2(-120 - i * 60, 0);
+      const offset = offsets[i] ?? new Vector2(-120 - i * 60, 0);
       this.bots[i].reset(offset, 0);
     }
   }
@@ -354,8 +372,16 @@ export class Game {
     this.hud.setPosition(window.innerWidth, window.innerHeight);
     this.miniMap.setPosition(window.innerWidth, window.innerHeight);
     this.touchControls.setPosition(window.innerWidth, window.innerHeight);
+    this.musicControls.setPosition(window.innerWidth);
     this.dialogue.resize(window.innerWidth, window.innerHeight);
   };
+
+  private syncMusicControls(): void {
+    this.musicControls.setState({
+      trackName: this.audio.musicTrackName,
+      isPlaying: this.audio.musicPlaying,
+    });
+  }
 
   private getSurfaceAt(x: number, y: number): SurfaceType {
     return this.worldManager.getSurfaceAt(x, y);
@@ -409,12 +435,9 @@ export class Game {
 
     // Reset vehicle and bots when transitioning to READY state
     if (this.raceMode.state === RaceState.READY && this.lastRaceState !== RaceState.READY) {
-      this.vehicle.model.position.set(0, 0);
-      this.vehicle.model.velocity.set(0, 0);
-      this.vehicle.model.heading = 0;
-      this.vehicle.model.yawRate = 0;
+      this.resetPlayer(this.startingGrid[0], 0);
       this.checkpoints.reset();
-      this.resetBots();
+      this.resetBots(this.startingGrid.slice(1));
       this.playerFinished = false;
       this.playerFinishTime = null;
     }
@@ -679,6 +702,7 @@ export class Game {
       surface: this.currentSurface,
       isBraking: this.input.getInput().brake > 0,
     });
+    this.syncMusicControls();
 
     // Update MiniMap
     const chunks = this.worldManager.getLoadedChunks().map(chunk => ({
@@ -696,4 +720,11 @@ export class Game {
       tileSize: TILE_SIZE,
     });
   };
+
+  private resetPlayer(position: Vector2, heading: number): void {
+    this.vehicle.model.position.copy(position);
+    this.vehicle.model.velocity.set(0, 0);
+    this.vehicle.model.heading = heading;
+    this.vehicle.model.yawRate = 0;
+  }
 }

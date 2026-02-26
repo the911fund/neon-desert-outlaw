@@ -63,4 +63,24 @@ describe('AudioManager', () => {
       expect(audio.volume).toBe(0.3);
     });
   });
+
+  describe('music playlist', () => {
+    it('exposes tracks and wraps track selection', () => {
+      const tracks = audio.getMusicTracks();
+      expect(tracks.length).toBeGreaterThanOrEqual(3);
+
+      audio.setTrack(-1);
+      expect(audio.musicTrackIndex).toBe(tracks.length - 1);
+
+      audio.nextTrack();
+      expect(audio.musicTrackIndex).toBe(0);
+    });
+
+    it('toggles music playback state', () => {
+      const playingBefore = audio.musicPlaying;
+      const playingAfter = audio.toggleMusicPlayback();
+      expect(playingAfter).toBe(!playingBefore);
+      expect(audio.musicPlaying).toBe(!playingBefore);
+    });
+  });
 });

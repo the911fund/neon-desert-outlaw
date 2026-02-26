@@ -16,12 +16,12 @@ export class DriftState {
   state: DriftPhase = DriftPhase.Normal;
   private recoveryTimer = 0;
 
-  readonly driftThreshold = 1.05;
-  readonly recoveryThreshold = 0.7;
-  readonly recoveryDuration = 0.4;
+  readonly driftThreshold = 1.22;
+  readonly recoveryThreshold = 0.78;
+  readonly recoveryDuration = 0.28;
 
-  readonly driftFrictionMultiplier = 0.7;
-  readonly recoveryFrictionMultiplier = 0.85;
+  readonly driftFrictionMultiplier = 0.84;
+  readonly recoveryFrictionMultiplier = 0.93;
 
   update(params: DriftUpdateParams): DriftPhase {
     const ratio = params.gripForce > 0 ? Math.abs(params.lateralForce) / params.gripForce : 0;

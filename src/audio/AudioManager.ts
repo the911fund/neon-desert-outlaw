@@ -10,6 +10,17 @@ export interface AudioState {
   isBraking: boolean;
 }
 
+export interface MusicTrackInfo {
+  id: string;
+  name: string;
+}
+
+interface ProceduralMusicTrack extends MusicTrackInfo {
+  bpm: number;
+  leadPattern: number[];
+  bassPattern: number[];
+}
+
 export class AudioManager {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
@@ -30,6 +41,41 @@ export class AudioManager {
   private surfaceOsc: OscillatorNode | null = null;
   private surfaceGain: GainNode | null = null;
 
+  // Background music
+  private musicLeadOsc: OscillatorNode | null = null;
+  private musicLeadGain: GainNode | null = null;
+  private musicBassOsc: OscillatorNode | null = null;
+  private musicBassGain: GainNode | null = null;
+  private musicStepTimer: ReturnType<typeof setInterval> | null = null;
+  private musicStep = 0;
+  private musicLoops = 0;
+  private _musicPlaying = true;
+  private currentTrackIndex = 0;
+
+  private readonly musicTracks: ProceduralMusicTrack[] = [
+    {
+      id: 'sunset-run',
+      name: 'Sunset Run',
+      bpm: 132,
+      leadPattern: [440, 494, 554, 659, 554, 494, 440, 392, 440, 494, 554, 659, 587, 523, 440, 0],
+      bassPattern: [110, 110, 123, 123, 139, 139, 123, 123, 110, 110, 98, 98, 82, 82, 98, 0],
+    },
+    {
+      id: 'chrome-highway',
+      name: 'Chrome Highway',
+      bpm: 122,
+      leadPattern: [523, 587, 659, 698, 659, 587, 523, 466, 523, 587, 659, 698, 659, 587, 523, 0],
+      bassPattern: [98, 98, 98, 98, 123, 123, 123, 123, 110, 110, 110, 110, 82, 82, 82, 0],
+    },
+    {
+      id: 'neon-midnight',
+      name: 'Neon Midnight',
+      bpm: 138,
+      leadPattern: [349, 392, 440, 392, 523, 440, 392, 349, 392, 440, 494, 440, 523, 587, 440, 0],
+      bassPattern: [87, 87, 87, 87, 110, 110, 110, 110, 98, 98, 98, 98, 73, 73, 73, 0],
+    },
+  ];
+
   private _muted = true;
   private _volume = 0.5;
   private started = false;
@@ -40,6 +86,47 @@ export class AudioManager {
 
   get volume(): number {
     return this._volume;
+  }
+
+  get musicPlaying(): boolean {
+    return this._musicPlaying;
+  }
+
+  get musicTrackIndex(): number {
+    return this.currentTrackIndex;
+  }
+
+  get musicTrackName(): string {
+    return this.musicTracks[this.currentTrackIndex]?.name ?? 'N/A';
+  }
+
+  getMusicTracks(): MusicTrackInfo[] {
+    return this.musicTracks.map(({ id, name }) => ({ id, name }));
+  }
+
+  setTrack(index: number): void {
+    if (this.musicTracks.length === 0) return;
+    const wrapped = ((Math.floor(index) % this.musicTracks.length) + this.musicTracks.length) % this.musicTracks.length;
+    this.currentTrackIndex = wrapped;
+    this.musicStep = 0;
+    this.musicLoops = 0;
+    if (this.started) this.startMusicTimer();
+  }
+
+  nextTrack(manual = true): void {
+    this.setTrack(this.currentTrackIndex + 1);
+    if (manual) this.applyCurrentMusicStep(true);
+  }
+
+  previousTrack(): void {
+    this.setTrack(this.currentTrackIndex - 1);
+    this.applyCurrentMusicStep(true);
+  }
+
+  toggleMusicPlayback(): boolean {
+    this._musicPlaying = !this._musicPlaying;
+    this.applyCurrentMusicStep(true);
+    return this._musicPlaying;
   }
 
   setVolume(v: number): void {
@@ -70,6 +157,7 @@ export class AudioManager {
     this.initEngine();
     this.initDrift();
     this.initSurface();
+    this.initMusic();
   }
 
   private initEngine(): void {
@@ -146,6 +234,80 @@ export class AudioManager {
     this.surfaceOsc.start();
   }
 
+  private initMusic(): void {
+    const ctx = this.ctx!;
+    const master = this.masterGain!;
+
+    this.musicLeadOsc = ctx.createOscillator();
+    this.musicLeadOsc.type = 'triangle';
+    this.musicLeadGain = ctx.createGain();
+    this.musicLeadGain.gain.value = 0;
+    this.musicLeadOsc.connect(this.musicLeadGain);
+    this.musicLeadGain.connect(master);
+    this.musicLeadOsc.start();
+
+    this.musicBassOsc = ctx.createOscillator();
+    this.musicBassOsc.type = 'square';
+    this.musicBassGain = ctx.createGain();
+    this.musicBassGain.gain.value = 0;
+    this.musicBassOsc.connect(this.musicBassGain);
+    this.musicBassGain.connect(master);
+    this.musicBassOsc.start();
+
+    this.startMusicTimer();
+    this.applyCurrentMusicStep(true);
+  }
+
+  private startMusicTimer(): void {
+    this.stopMusicTimer();
+    const track = this.musicTracks[this.currentTrackIndex];
+    const stepMs = (60_000 / track.bpm) / 2;
+    this.musicStepTimer = setInterval(() => {
+      this.advanceMusicStep();
+    }, stepMs);
+  }
+
+  private stopMusicTimer(): void {
+    if (this.musicStepTimer !== null) {
+      clearInterval(this.musicStepTimer);
+      this.musicStepTimer = null;
+    }
+  }
+
+  private advanceMusicStep(): void {
+    this.musicStep += 1;
+    const track = this.musicTracks[this.currentTrackIndex];
+    if (this.musicStep >= track.leadPattern.length) {
+      this.musicStep = 0;
+      this.musicLoops += 1;
+
+      // Automatic rotating playlist every 4 loops.
+      if (this.musicLoops >= 4) {
+        this.nextTrack(false);
+        this.startMusicTimer();
+      }
+    }
+    this.applyCurrentMusicStep(false);
+  }
+
+  private applyCurrentMusicStep(forceImmediate: boolean): void {
+    if (!this.ctx || !this.musicLeadOsc || !this.musicLeadGain || !this.musicBassOsc || !this.musicBassGain) return;
+
+    const now = this.ctx.currentTime;
+    const track = this.musicTracks[this.currentTrackIndex];
+    const leadNote = track.leadPattern[this.musicStep] ?? 0;
+    const bassNote = track.bassPattern[this.musicStep % track.bassPattern.length] ?? 0;
+    const smooth = forceImmediate ? 0.001 : 0.025;
+
+    this.musicLeadOsc.frequency.setTargetAtTime(Math.max(leadNote, 35), now, smooth);
+    this.musicBassOsc.frequency.setTargetAtTime(Math.max(bassNote, 35), now, smooth);
+
+    const leadTarget = this._musicPlaying && leadNote > 0 ? 0.085 : 0;
+    const bassTarget = this._musicPlaying && bassNote > 0 ? 0.05 : 0;
+    this.musicLeadGain.gain.setTargetAtTime(leadTarget, now, smooth);
+    this.musicBassGain.gain.setTargetAtTime(bassTarget, now, smooth);
+  }
+
   update(state: AudioState): void {
     if (!this.ctx || !this.started) return;
 
@@ -216,6 +378,7 @@ export class AudioManager {
   }
 
   dispose(): void {
+    this.stopMusicTimer();
     if (this.ctx) {
       this.ctx.close();
       this.ctx = null;

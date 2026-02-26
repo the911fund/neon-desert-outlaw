@@ -59,7 +59,7 @@ export class CheckpointManager {
       this.checkpoints.push(checkpoint);
 
       const gfx = new Graphics();
-      this.drawCheckpoint(gfx, false, false);
+      this.drawCheckpoint(gfx, checkpoint, false);
       gfx.position.set(x, y);
       this.bloom.applyTo(gfx, 0.6, 2);
       this.container.addChild(gfx);
@@ -88,21 +88,22 @@ export class CheckpointManager {
     for (let i = 0; i < this.checkpoints.length; i++) {
       const checkpoint = this.checkpoints[i];
       const isNext = i === this.currentIndex;
-      this.drawCheckpoint(this.graphics[i], checkpoint.collected, isNext);
+      this.drawCheckpoint(this.graphics[i], checkpoint, isNext);
       this.graphics[i].visible = !checkpoint.collected;
     }
 
     return collected;
   }
 
-  private drawCheckpoint(gfx: Graphics, collected: boolean, isNext: boolean): void {
+  private drawCheckpoint(gfx: Graphics, checkpoint: Checkpoint, isNext: boolean): void {
     gfx.clear();
 
-    if (collected) return;
+    if (checkpoint.collected) return;
 
     const pulse = Math.sin(this.time * 3) * 0.3 + 0.7;
     const color = isNext ? this.neonMagenta : this.neonCyan;
     const radius = this.gateRadius;
+    const flagHeight = radius + 28;
 
     // Outer ring (glow)
     gfx.beginFill(color, 0.1 * pulse);
@@ -121,6 +122,33 @@ export class CheckpointManager {
     gfx.beginFill(color, 0.6 * pulse);
     gfx.drawCircle(0, 0, 4);
     gfx.endFill();
+
+    // Pole marker to make checkpoints readable at distance.
+    gfx.lineStyle(3, color, 0.9);
+    gfx.moveTo(0, radius + 8);
+    gfx.lineTo(0, -flagHeight);
+
+    // Flag marker near top of pole.
+    const flagW = 22 + pulse * 6;
+    const flagH = 12;
+    const flagY = -flagHeight + 6;
+    const isFinish = checkpoint.index === this.checkpoints.length - 1;
+    const flagColor = isFinish ? 0xffffff : color;
+    gfx.beginFill(flagColor, 0.95);
+    gfx.drawPolygon([
+      0, flagY,
+      flagW, flagY + 2,
+      flagW - 5, flagY + flagH,
+      0, flagY + flagH - 2,
+    ]);
+    gfx.endFill();
+
+    if (isFinish) {
+      gfx.beginFill(0x222222, 0.9);
+      gfx.drawRect(6, flagY + 2, 6, 4);
+      gfx.drawRect(14, flagY + 8, 6, 4);
+      gfx.endFill();
+    }
   }
 
   getNextCheckpoint(): Checkpoint | null {
