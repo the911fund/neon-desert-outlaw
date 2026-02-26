@@ -36,15 +36,15 @@ export class BicycleModel {
   cgToRear = 1.4;
   cgHeight = 0.45;
   inertia = 900; // lower = faster rotation
-  maxSteer = 0.85; // radians — wider steering range
+  maxSteer = 0.95; // radians — wider steering range
   maxEngineForce = 14000; // N — punchier acceleration
   maxBrakeForce = 15000; // N
   maxHandbrakeForce = 8000; // N
-  corneringStiffnessFront = 38000; // lower = quicker turn-in
-  corneringStiffnessRear = 42000;
+  corneringStiffnessFront = 62000; // more lateral bite for tighter response
+  corneringStiffnessRear = 70000;
   rollingResistance = 8.0; // less drag at low speed
   dragCoefficient = 0.35; // less air resistance
-  yawDamping = 1.4; // less damping = more responsive rotation
+  yawDamping = 2.1; // stabilize snap turns without feeling floaty
 
   private debugInfo: BicycleDebugInfo = {
     longitudinalForce: 0,
@@ -103,7 +103,7 @@ export class BicycleModel {
     const rearLoad = Math.max(0, weight * (this.cgToFront / this.wheelBase) + weightTransfer);
 
     const driftMultiplier = this.driftState.frictionMultiplier;
-    const mu = surfaceFriction * driftMultiplier;
+    const mu = surfaceFriction * 1.2 * driftMultiplier;
     const rearGripFactor = 1 - handbrake * 0.45;
 
     const maxFrontLat = mu * frontLoad;
@@ -131,6 +131,15 @@ export class BicycleModel {
 
     this.velocity.x += accelWorldX * dt;
     this.velocity.y += accelWorldY * dt;
+
+    // Arcade stability assist: quickly bleed sideways velocity to reduce unwanted slide.
+    const postLong = cos * this.velocity.x + sin * this.velocity.y;
+    const postLat = -sin * this.velocity.x + cos * this.velocity.y;
+    const speedRatio = clamp(Math.abs(postLong) / 45, 0, 1);
+    const lateralDamping = 1 - clamp((6 + speedRatio * 7) * dt * surfaceFriction * driftMultiplier, 0, 0.88);
+    const stabilizedLat = postLat * lateralDamping;
+    this.velocity.x = cos * postLong - sin * stabilizedLat;
+    this.velocity.y = sin * postLong + cos * stabilizedLat;
 
     this.position.x += this.velocity.x * dt;
     this.position.y += this.velocity.y * dt;
