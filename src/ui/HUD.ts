@@ -930,34 +930,55 @@ export class HUD {
   }
 
   setPosition(screenWidth: number, screenHeight: number): void {
-    // Drift display at bottom center
-    this.driftContainer.position.set(screenWidth / 2, screenHeight - 100);
+    // Responsive scale factor for mobile (reference: 1024px width)
+    const scale = Math.max(0.5, Math.min(1, screenWidth / 1024));
+    const isMobile = screenWidth < 768;
+
+    // Scale speed panel for mobile
+    this.speedContainer.scale.set(scale);
+    this.rpmContainer.scale.set(scale);
+    this.surfaceContainer.scale.set(scale);
+
+    // Drift display at bottom center (higher on mobile to avoid touch controls)
+    const driftY = isMobile ? screenHeight - 180 : screenHeight - 100;
+    this.driftContainer.position.set(screenWidth / 2, driftY);
+    this.driftContainer.scale.set(scale);
 
     // Race timer at top center
     this.raceTimerContainer.position.set(screenWidth / 2, 15);
+    this.raceTimerContainer.scale.set(scale);
 
     // Direction arrow below timer
-    this.arrowGraphics.position.set(screenWidth / 2, 100);
+    this.arrowGraphics.position.set(screenWidth / 2, isMobile ? 80 : 100);
 
     // Overlay at center
     this.overlayContainer.position.set(screenWidth / 2, screenHeight / 2);
+    this.overlayContainer.scale.set(scale);
 
     // Countdown at center
     this.countdownText.position.set(screenWidth / 2, screenHeight / 2);
+    this.countdownText.scale.set(scale);
 
     // Sound hint at bottom
-    this.soundHintText.position.set(screenWidth / 2 - 70, screenHeight - 30);
+    this.soundHintText.position.set(screenWidth / 2 - 70 * scale, screenHeight - 30);
+    this.soundHintText.scale.set(scale);
 
-    // Position display (top right, left of minimap)
-    this.positionContainer.position.set(screenWidth - 280, 20);
+    // Position display (top right, left of minimap — closer on mobile)
+    const posX = isMobile ? screenWidth - 180 : screenWidth - 280;
+    this.positionContainer.position.set(posX, 20);
+    this.positionContainer.scale.set(scale);
 
     // Standings below position
-    this.standingsContainer.position.set(screenWidth - 280, 90);
+    this.standingsContainer.position.set(posX, 20 + 70 * scale);
+    this.standingsContainer.scale.set(scale);
 
     // Story HUD positions
     this.missionTitleText.position.set(screenWidth / 2, screenHeight / 2);
-    this.chapterTitleText.position.set(screenWidth / 2, screenHeight / 2 - 50);
-    this.objectiveText.position.set(screenWidth / 2, 90);
+    this.missionTitleText.scale.set(scale);
+    this.chapterTitleText.position.set(screenWidth / 2, screenHeight / 2 - 50 * scale);
+    this.chapterTitleText.scale.set(scale);
+    this.objectiveText.position.set(screenWidth / 2, isMobile ? 70 : 90);
+    this.objectiveText.scale.set(scale);
 
     // Story overlays
     this.storyOverlayBg.clear();
@@ -965,13 +986,17 @@ export class HUD {
     this.storyOverlayBg.drawRect(0, 0, screenWidth, screenHeight);
     this.storyOverlayBg.endFill();
     this.storyOverlayTitle.position.set(screenWidth / 2, screenHeight / 2 - 30);
+    this.storyOverlayTitle.scale.set(scale);
     this.storyOverlaySubtitle.position.set(screenWidth / 2, screenHeight / 2 + 50);
+    this.storyOverlaySubtitle.scale.set(scale);
 
     this.storyFailedBg.clear();
     this.storyFailedBg.beginFill(0x000000, 0.7);
     this.storyFailedBg.drawRect(0, 0, screenWidth, screenHeight);
     this.storyFailedBg.endFill();
     this.storyFailedTitle.position.set(screenWidth / 2, screenHeight / 2 - 20);
+    this.storyFailedTitle.scale.set(scale);
     this.storyFailedHint.position.set(screenWidth / 2, screenHeight / 2 + 40);
+    this.storyFailedHint.scale.set(scale);
   }
 }

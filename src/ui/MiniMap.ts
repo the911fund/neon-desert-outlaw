@@ -252,7 +252,12 @@ export class MiniMap {
   }
 
   setPosition(screenWidth: number, screenHeight: number): void {
+    // Scale down on mobile screens
+    const scale = screenWidth < 768 ? 0.65 : 1;
+    this.container.scale.set(scale);
+
     // Position in top-right corner with padding
-    this.container.position.set(screenWidth - this.size - 20, 20);
+    const effectiveSize = this.size * scale;
+    this.container.position.set(screenWidth - effectiveSize - 16, 16);
   }
 }
