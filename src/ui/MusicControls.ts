@@ -105,7 +105,10 @@ export class MusicControls {
   }
 
   setPosition(screenWidth: number): void {
-    this.container.position.set(screenWidth - this.width - 16, 12);
+    // Scale down on mobile
+    const scale = screenWidth < 768 ? 0.7 : 1;
+    this.container.scale.set(scale);
+    this.container.position.set(screenWidth - this.width * scale - 12, 12);
   }
 
   setState(state: MusicControlsState): void {

@@ -309,18 +309,33 @@ export class MainMenu {
 
     const cx = width / 2;
 
+    // Responsive scale factor for mobile (reference: 1024px width)
+    const scale = Math.min(1, width / 1024);
+    const mobileScale = Math.max(0.5, scale);
+
+    // Scale title for mobile
+    this.titleText.style.fontSize = Math.round(64 * mobileScale);
+    this.subtitleText.style.fontSize = Math.round(20 * mobileScale);
+
+    // Scale menu items
+    for (const item of this.items) {
+      item.text.style.fontSize = Math.round(28 * mobileScale);
+    }
+
     // Title position
     this.titleText.position.set(cx, height * 0.22);
-    this.subtitleText.position.set(cx, height * 0.22 + 55);
+    const subtitleGap = 55 * mobileScale;
+    this.subtitleText.position.set(cx, height * 0.22 + subtitleGap);
 
     // Menu items
     const menuStartY = height * 0.50;
-    const itemSpacing = 55;
+    const itemSpacing = Math.round(55 * mobileScale);
     for (let i = 0; i < this.items.length; i++) {
       this.items[i].text.position.set(cx, menuStartY + i * itemSpacing);
     }
 
     // Toast
+    this.toastText.style.fontSize = Math.round(24 * mobileScale);
     this.toastText.position.set(cx, menuStartY + this.items.length * itemSpacing + 40);
 
     if (this.showingControls) {
