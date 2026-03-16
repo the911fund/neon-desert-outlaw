@@ -39,10 +39,19 @@ export class CheckpointManager {
       [-600, 0],      // 9: west on road
       [-200, 200],    // 10: loop back to start area
     ];
-    this.generateFromPositions(waypoints);
+    this.generateFromPositions(waypoints, true);
   }
 
-  generateFromPositions(waypoints: [number, number][]): void {
+  generateFromPositions(waypoints: [number, number][], shuffle = false): void {
+    // Optionally randomize checkpoint order (Fisher-Yates shuffle)
+    if (shuffle) {
+      waypoints = [...waypoints];
+      for (let i = waypoints.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [waypoints[i], waypoints[j]] = [waypoints[j], waypoints[i]];
+      }
+    }
+
     // Clear previous
     this.container.removeChildren();
     this.graphics = [];

@@ -228,6 +228,14 @@ export class MainMenu {
       }),
     });
     text.anchor.set(0.5, 0.5);
+    text.eventMode = 'static';
+    text.cursor = 'pointer';
+    const idx = this.items.length;
+    text.on('pointerdown', () => {
+      this.selectedIndex = idx;
+      this.updateSelection();
+      this.items[idx].action();
+    });
     this.container.addChild(text);
 
     this.items.push({ label, action, text });

@@ -133,11 +133,13 @@ export class MissionManager {
     }
 
     if (m.objectives.type === 'offroad_only' && currentSurface === 'Road') {
-      // Small grace: only fail after accumulating road contact
-      this._touchedRoad = true;
-      this._state = 'failed';
-      this._failed = true;
-      return this._state;
+      // Grace period: allow 2 seconds before enforcing offroad rule
+      if (this._missionTime > 2) {
+        this._touchedRoad = true;
+        this._state = 'failed';
+        this._failed = true;
+        return this._state;
+      }
     }
 
     // Check win condition

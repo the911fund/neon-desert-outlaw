@@ -9,19 +9,19 @@ describe('AudioManager', () => {
   });
 
   describe('mute toggle', () => {
-    it('starts muted', () => {
-      expect(audio.muted).toBe(true);
-    });
-
-    it('toggles mute off', () => {
-      audio.toggleMute();
+    it('starts unmuted', () => {
       expect(audio.muted).toBe(false);
     });
 
-    it('toggles mute back on after double toggle', () => {
-      audio.toggleMute();
+    it('toggles mute on', () => {
       audio.toggleMute();
       expect(audio.muted).toBe(true);
+    });
+
+    it('toggles mute back off after double toggle', () => {
+      audio.toggleMute();
+      audio.toggleMute();
+      expect(audio.muted).toBe(false);
     });
   });
 
@@ -48,9 +48,8 @@ describe('AudioManager', () => {
 
   describe('state transitions', () => {
     it('mute state persists through volume changes', () => {
-      // starts muted, unmute first then remute
-      audio.toggleMute(); // unmute
-      audio.toggleMute(); // mute again
+      // starts unmuted, mute then check
+      audio.toggleMute(); // mute
       audio.setVolume(0.9);
       expect(audio.muted).toBe(true);
       expect(audio.volume).toBe(0.9);
