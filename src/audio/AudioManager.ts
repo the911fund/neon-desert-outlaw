@@ -76,7 +76,7 @@ export class AudioManager {
     },
   ];
 
-  private _muted = true;
+  private _muted = false;
   private _volume = 0.5;
   private started = false;
 

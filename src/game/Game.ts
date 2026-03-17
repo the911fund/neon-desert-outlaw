@@ -174,9 +174,11 @@ export class Game {
       this.audio.start();
       window.removeEventListener('click', startAudio);
       window.removeEventListener('keydown', startAudio);
+      window.removeEventListener('touchstart', startAudio);
     };
     window.addEventListener('click', startAudio);
     window.addEventListener('keydown', startAudio);
+    window.addEventListener('touchstart', startAudio);
     this.syncMusicControls();
 
     // Story mode systems
@@ -263,7 +265,6 @@ export class Game {
     this.running = true;
 
     this.missionManager.init(STORY_MISSIONS);
-    this.missionManager.startMission();
 
     // Hide bots in story mode
     for (const bot of this.bots) {
@@ -289,12 +290,17 @@ export class Game {
     this.vehicle.model.yawRate = 0;
     this.driftScore = 0;
     this.accumulator = 0;
-    this.currentSurface = SurfaceType.Road;
+    // For offroad-only missions, start on sand to avoid instant failure
+    if (mission.objectives.type === 'offroad_only') {
+      this.currentSurface = SurfaceType.Sand;
+    } else {
+      this.currentSurface = SurfaceType.Road;
+    }
     this.camera.snapTo(0, 0);
 
     // Setup checkpoints for this mission
     this.checkpoints.reset();
-    this.checkpoints.generateFromPositions(mission.checkpoints);
+    this.checkpoints.generateFromPositions(mission.checkpoints, true);
 
     // Reset race mode to RACING (skip countdown in story)
     this.raceMode.state = RaceState.RACING;
