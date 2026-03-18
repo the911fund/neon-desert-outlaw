@@ -144,7 +144,7 @@ export class HUD {
     this.overlayBest = new Text({ text: '', style: this.createOverlayBestStyle() });
     this.countdownText = new Text({ text: '', style: this.createCountdownStyle() });
     this.flashGraphics = new Graphics();
-    this.soundHintText = new Text({ text: 'Press M for sound', style: this.createLabelStyle() });
+    this.soundHintText = new Text({ text: 'Press M or tap 🔊 for sound', style: this.createLabelStyle() });
 
     // Position display (top right)
     this.positionContainer = new Container();
@@ -216,7 +216,7 @@ export class HUD {
       dropShadow: { color: 0xff4444, blur: 16, distance: 0 },
     })});
     this.storyFailedTitle.anchor.set(0.5, 0.5);
-    this.storyFailedHint = new Text({ text: 'Press ENTER to retry  |  ESC for menu', style: new TextStyle({
+    this.storyFailedHint = new Text({ text: 'ENTER / ▶ GO to retry  ·  ESC / ✕ BACK for menu', style: new TextStyle({
       fontFamily: 'monospace', fontSize: 18, fill: 0x999999,
     })});
     this.storyFailedHint.anchor.set(0.5, 0.5);
@@ -752,7 +752,7 @@ export class HUD {
       case RaceState.TITLE:
         this.overlayTitle.text = 'NEON DESERT OUTLAW';
         this.overlayTitle.position.set(0, -40);
-        this.overlaySubtitle.text = 'Press ENTER to race';
+        this.overlaySubtitle.text = 'Press ENTER or tap ▶ GO';
         this.overlaySubtitle.position.set(0, 30);
         if (state.bestTime) {
           this.overlayBest.text = `Best: ${state.bestTime}`;
@@ -766,7 +766,7 @@ export class HUD {
       case RaceState.READY:
         this.overlayTitle.text = 'READY';
         this.overlayTitle.position.set(0, -40);
-        this.overlaySubtitle.text = 'Press ENTER to start';
+        this.overlaySubtitle.text = 'Press ENTER or tap ▶ GO';
         this.overlaySubtitle.position.set(0, 30);
         if (state.bestTime) {
           this.overlayBest.text = `Best: ${state.bestTime}`;
@@ -783,7 +783,7 @@ export class HUD {
           : '';
         this.overlayTitle.text = `${posLabel} — ${state.formattedTime}`;
         this.overlayTitle.position.set(0, -60);
-        this.overlaySubtitle.text = 'Press ENTER to restart';
+        this.overlaySubtitle.text = 'Press ENTER or tap ▶ GO';
         this.overlaySubtitle.position.set(0, 10);
         if (state.bestTime) {
           this.overlayBest.text = `Best: ${state.bestTime}`;

@@ -35,6 +35,15 @@ export class RaceMode {
     }
   };
 
+  /** Simulate an Enter press from touch UI. */
+  triggerEnter(): void {
+    this.enterPressed = true;
+    // Release on next frame so consumeEnter picks it up
+    requestAnimationFrame(() => {
+      this.enterPressed = false;
+    });
+  }
+
   /** Returns true on the frame Enter is newly pressed (edge detection). */
   private consumeEnter(): boolean {
     const pressed = this.enterPressed && !this.enterWasDown;
