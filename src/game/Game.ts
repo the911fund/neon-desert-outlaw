@@ -105,7 +105,19 @@ export class Game {
     // Initialize UI components
     this.hud = new HUD();
     this.miniMap = new MiniMap();
-    this.touchControls = new TouchControls();
+    this.touchControls = new TouchControls({
+      onEnter: () => {
+        this.raceMode.triggerEnter();
+        // Also handle story mode retry/finale on mobile
+        if (this.isStoryMode && this.missionManager.state === 'failed') {
+          this.missionManager.retry();
+          this.launchCurrentMission();
+        } else if (this.isStoryMode && this.missionManager.state === 'finale') {
+          if (this.onExit) this.onExit();
+        }
+      },
+      onBack: () => { if (this.onExit) this.onExit(); },
+    });
     this.musicControls = new MusicControls(
       () => {
         this.audio.previousTrack();
@@ -175,10 +187,12 @@ export class Game {
       window.removeEventListener('click', startAudio);
       window.removeEventListener('keydown', startAudio);
       window.removeEventListener('touchstart', startAudio);
+      window.removeEventListener('pointerdown', startAudio);
     };
     window.addEventListener('click', startAudio);
     window.addEventListener('keydown', startAudio);
     window.addEventListener('touchstart', startAudio);
+    window.addEventListener('pointerdown', startAudio);
     this.syncMusicControls();
 
     // Story mode systems

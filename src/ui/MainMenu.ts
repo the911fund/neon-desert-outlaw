@@ -150,11 +150,19 @@ export class MainMenu {
 
     this.controlsBody = new Text({
       text: [
+        '--- KEYBOARD ---',
         'WASD / Arrow Keys .... Drive',
         'Space ................ Handbrake',
         'M .................... Toggle Sound',
         'Enter ................ Start Race',
         'ESC .................. Back to Menu',
+        '',
+        '--- MOBILE / TOUCH ---',
+        'Left Joystick ........ Steer & Throttle',
+        'B Button ............. Brake',
+        'H Button ............. Handbrake',
+        '▶ GO Button .......... Start Race',
+        '✕ BACK Button ........ Back to Menu',
       ].join('\n'),
       style: new TextStyle({
         fontFamily: 'monospace',
@@ -167,7 +175,7 @@ export class MainMenu {
     this.controlsContainer.addChild(this.controlsBody);
 
     this.controlsHint = new Text({
-      text: 'Press ESC or ENTER to go back',
+      text: 'Press ESC / ENTER or tap here to go back',
       style: new TextStyle({
         fontFamily: 'monospace',
         fontSize: 16,
@@ -175,6 +183,9 @@ export class MainMenu {
       }),
     });
     this.controlsHint.anchor.set(0.5, 0.5);
+    this.controlsHint.eventMode = 'static';
+    this.controlsHint.cursor = 'pointer';
+    this.controlsHint.on('pointerdown', () => this.hideControls());
     this.controlsContainer.addChild(this.controlsHint);
 
     this.container.addChild(this.controlsContainer);

@@ -1,4 +1,4 @@
-import { Container, Graphics, FederatedPointerEvent } from 'pixi.js';
+import { Container, Graphics, Text, TextStyle, FederatedPointerEvent } from 'pixi.js';
 import { clamp } from '../utils/MathUtils';
 
 export interface TouchInput {
@@ -6,6 +6,11 @@ export interface TouchInput {
   brake: number; // 0-1
   steer: number; // -1 to 1
   handbrake: number; // 0-1
+}
+
+export interface TouchActionCallbacks {
+  onEnter?: () => void;
+  onBack?: () => void;
 }
 
 export class TouchControls {
@@ -18,12 +23,19 @@ export class TouchControls {
   private brakeButton: Graphics;
   private handbrakeButton: Graphics;
 
+  // Action buttons for mobile navigation
+  private backButton: Container;
+  private enterButton: Container;
+
   private readonly joystickRadius = 60;
   private readonly knobRadius = 25;
   private readonly buttonRadius = 40;
+  private readonly actionButtonWidth = 70;
+  private readonly actionButtonHeight = 36;
   private readonly neonCyan = 0x00ffff;
   private readonly neonMagenta = 0xff00ff;
   private readonly neonRed = 0xff4444;
+  private readonly neonGreen = 0x44ff44;
 
   private joystickActive = false;
   private joystickTouchId: number | null = null;
@@ -34,9 +46,11 @@ export class TouchControls {
 
   private isTouchDevice = false;
   private _visible = false;
+  private callbacks: TouchActionCallbacks = {};
 
-  constructor() {
+  constructor(callbacks?: TouchActionCallbacks) {
     this.container = new Container();
+    if (callbacks) this.callbacks = callbacks;
 
     // Detect touch capability
     this.isTouchDevice = this.detectTouchDevice();
@@ -48,12 +62,18 @@ export class TouchControls {
     this.brakeButton = new Graphics();
     this.handbrakeButton = new Graphics();
 
+    // Action buttons
+    this.backButton = this.createActionButton('✕ BACK', this.neonRed, () => this.callbacks.onBack?.());
+    this.enterButton = this.createActionButton('▶ GO', this.neonGreen, () => this.callbacks.onEnter?.());
+
     this.setupJoystick();
     this.setupButtons();
 
     this.container.addChild(this.joystickContainer);
     this.container.addChild(this.brakeButton);
     this.container.addChild(this.handbrakeButton);
+    this.container.addChild(this.backButton);
+    this.container.addChild(this.enterButton);
 
     // Initially hide if not touch device
     this.container.visible = this.isTouchDevice;
@@ -64,6 +84,10 @@ export class TouchControls {
     }
   }
 
+  setCallbacks(callbacks: TouchActionCallbacks): void {
+    this.callbacks = callbacks;
+  }
+
   private detectTouchDevice(): boolean {
     return (
       'ontouchstart' in window ||
@@ -71,6 +95,37 @@ export class TouchControls {
       // @ts-expect-error - msMaxTouchPoints is IE-specific
       navigator.msMaxTouchPoints > 0
     );
+  }
+
+  private createActionButton(label: string, color: number, onTap: () => void): Container {
+    const btn = new Container();
+    const bg = new Graphics();
+    bg.beginFill(0x1a1a1a, 0.7);
+    bg.drawRoundedRect(-this.actionButtonWidth / 2, -this.actionButtonHeight / 2,
+      this.actionButtonWidth, this.actionButtonHeight, 8);
+    bg.endFill();
+    bg.lineStyle(2, color, 0.7);
+    bg.drawRoundedRect(-this.actionButtonWidth / 2, -this.actionButtonHeight / 2,
+      this.actionButtonWidth, this.actionButtonHeight, 8);
+    btn.addChild(bg);
+
+    const text = new Text({
+      text: label,
+      style: new TextStyle({
+        fontFamily: 'monospace',
+        fontSize: 14,
+        fontWeight: 'bold',
+        fill: color,
+      }),
+    });
+    text.anchor.set(0.5, 0.5);
+    btn.addChild(text);
+
+    bg.eventMode = 'static';
+    bg.cursor = 'pointer';
+    bg.on('pointerdown', () => onTap());
+
+    return btn;
   }
 
   private setupJoystick(): void {
@@ -256,6 +311,12 @@ export class TouchControls {
     };
   }
 
+  /** Show or hide the action buttons (BACK / GO). */
+  showActionButtons(show: boolean): void {
+    this.backButton.visible = show && this.isTouchDevice;
+    this.enterButton.visible = show && this.isTouchDevice;
+  }
+
   setPosition(screenWidth: number, screenHeight: number): void {
     // Joystick on left side, near bottom
     this.joystickContainer.position.set(
@@ -273,6 +334,10 @@ export class TouchControls {
       screenWidth - this.buttonRadius - 30,
       screenHeight - this.buttonRadius * 3 - 100
     );
+
+    // Action buttons: top corners
+    this.backButton.position.set(50, 30);
+    this.enterButton.position.set(screenWidth - 50, 30);
   }
 
   get visible(): boolean {
