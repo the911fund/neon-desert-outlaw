@@ -37,6 +37,9 @@ export class DialogueBox {
     this.container.visible = false;
 
     this.bg = new Graphics();
+    this.bg.eventMode = 'static';
+    this.bg.cursor = 'pointer';
+    this.bg.on('pointertap', () => this.advance());
     this.container.addChild(this.bg);
 
     this.speakerText = new Text({
@@ -123,7 +126,7 @@ export class DialogueBox {
     }
   }
 
-  private advance(): void {
+  advance(): void {
     if (this.finished) return;
 
     if (this.typing) {

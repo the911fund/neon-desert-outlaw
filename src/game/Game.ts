@@ -23,12 +23,14 @@ import { Headlights } from '../vehicle/Headlights';
 import { AudioManager } from '../audio/AudioManager';
 import { CollisionSystem } from '../physics/CollisionSystem';
 import { Vector2 } from '../utils/Vector2';
+import { DriftPhase } from '../physics/DriftState';
 import { BotVehicle, BOT_COLORS } from '../ai/BotVehicle';
 import { BOT_PERSONALITIES } from '../ai/BotDriver';
 import { MissionManager } from '../story/Mission';
 import type { StoryState } from '../story/Mission';
 import { DialogueBox } from '../story/DialogueBox';
 import { STORY_MISSIONS } from '../story/StoryContent';
+import { getViewportSize } from '../utils/viewport';
 
 export class Game {
   private app: Application;
@@ -99,7 +101,8 @@ export class Game {
 
     // Initialize camera
     this.camera = new Camera();
-    this.camera.setScreenSize(window.innerWidth, window.innerHeight);
+    const initialViewport = getViewportSize();
+    this.camera.setScreenSize(initialViewport.width, initialViewport.height);
     this.camera.snapTo(0, 0);
 
     // Initialize UI components
@@ -107,6 +110,11 @@ export class Game {
     this.miniMap = new MiniMap();
     this.touchControls = new TouchControls({
       onEnter: () => {
+        if (this.dialogue.isVisible) {
+          this.dialogue.advance();
+          return;
+        }
+
         this.raceMode.triggerEnter();
         // Also handle story mode retry/finale on mobile
         if (this.isStoryMode && this.missionManager.state === 'failed') {
@@ -223,6 +231,7 @@ export class Game {
     window.addEventListener('keydown', this.onEscKey);
 
     window.addEventListener('resize', this.handleResize);
+    window.visualViewport?.addEventListener('resize', this.handleResize);
     this.handleResize();
 
     // Initially hidden — call start() to begin gameplay
@@ -288,7 +297,8 @@ export class Game {
     this.setVisible(true);
     this.app.ticker.add(this.update);
     this.handleResize();
-    this.dialogue.resize(window.innerWidth, window.innerHeight);
+    const viewport = getViewportSize();
+    this.dialogue.resize(viewport.width, viewport.height);
 
     this.launchCurrentMission();
   }
@@ -384,16 +394,17 @@ export class Game {
   }
 
   private handleResize = (): void => {
-    this.app.renderer.resize(window.innerWidth, window.innerHeight);
-    this.camera.setScreenSize(window.innerWidth, window.innerHeight);
+    const viewport = getViewportSize();
+    this.app.renderer.resize(viewport.width, viewport.height);
+    this.camera.setScreenSize(viewport.width, viewport.height);
     this.lighting.resize(this.app.renderer.width, this.app.renderer.height);
 
     // Reposition UI elements
-    this.hud.setPosition(window.innerWidth, window.innerHeight);
-    this.miniMap.setPosition(window.innerWidth, window.innerHeight);
-    this.touchControls.setPosition(window.innerWidth, window.innerHeight);
-    this.musicControls.setPosition(window.innerWidth);
-    this.dialogue.resize(window.innerWidth, window.innerHeight);
+    this.hud.setPosition(viewport.width, viewport.height);
+    this.miniMap.setPosition(viewport.width, viewport.height);
+    this.touchControls.setPosition(viewport.width, viewport.height);
+    this.musicControls.setPosition(viewport.width, viewport.height);
+    this.dialogue.resize(viewport.width, viewport.height);
   };
 
   private syncMusicControls(): void {
@@ -511,9 +522,9 @@ export class Game {
       this.accumulator -= GAME_CONFIG.physicsStep;
 
       // Update drift score
-      if (this.vehicle.driftPhase === 'Drifting') {
+      if (this.vehicle.driftPhase === DriftPhase.Drifting) {
         this.driftScore += GAME_CONFIG.physicsStep * this.vehicle.speed * 0.01;
-      } else if (this.vehicle.driftPhase === 'Normal') {
+      } else if (this.vehicle.driftPhase === DriftPhase.Normal) {
         this.driftScore = 0;
       }
     }
@@ -689,6 +700,18 @@ export class Game {
         standings: this.standings.getStandings(),
       }, dt);
     }
+
+    const showMiniMap = this.isStoryMode
+      ? this.missionManager.state === 'playing'
+      : this.raceMode.state === RaceState.RACING;
+    this.miniMap.container.visible = showMiniMap;
+
+    const showEnterButton = this.isStoryMode
+      ? this.missionManager.state === 'failed' || this.missionManager.state === 'finale'
+      : this.raceMode.state === RaceState.TITLE
+        || this.raceMode.state === RaceState.READY
+        || this.raceMode.state === RaceState.FINISHED;
+    this.touchControls.setActionButtonVisibility(true, showEnterButton);
 
     // Story mode updates
     if (this.isStoryMode) {

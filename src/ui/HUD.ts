@@ -145,6 +145,9 @@ export class HUD {
     this.countdownText = new Text({ text: '', style: this.createCountdownStyle() });
     this.flashGraphics = new Graphics();
     this.soundHintText = new Text({ text: 'Press M or tap 🔊 for sound', style: this.createLabelStyle() });
+    this.soundHintText.anchor.set(0.5, 0.5);
+    this.soundHintText.style.wordWrap = true;
+    this.soundHintText.style.align = 'center';
 
     // Position display (top right)
     this.positionContainer = new Container();
@@ -170,6 +173,8 @@ export class HUD {
     this.missionTitleText = new Text({ text: '', style: new TextStyle({
       fontFamily: 'monospace', fontSize: 36, fontWeight: 'bold',
       fill: this.neonCyan,
+      wordWrap: true,
+      align: 'center',
       dropShadow: { color: this.neonCyan, blur: 12, distance: 0 },
     })});
     this.missionTitleText.anchor.set(0.5, 0.5);
@@ -177,13 +182,15 @@ export class HUD {
 
     this.chapterTitleText = new Text({ text: '', style: new TextStyle({
       fontFamily: 'monospace', fontSize: 20, fill: this.neonMagenta,
+      wordWrap: true,
+      align: 'center',
       dropShadow: { color: this.neonMagenta, blur: 8, distance: 0 },
     })});
     this.chapterTitleText.anchor.set(0.5, 0.5);
     this.chapterTitleText.visible = false;
 
     this.objectiveText = new Text({ text: '', style: new TextStyle({
-      fontFamily: 'monospace', fontSize: 16, fill: 0xcccccc,
+      fontFamily: 'monospace', fontSize: 16, fill: 0xcccccc, wordWrap: true, align: 'center',
     })});
     this.objectiveText.anchor.set(0.5, 0);
     this.objectiveText.visible = false;
@@ -195,11 +202,13 @@ export class HUD {
     this.storyOverlayTitle = new Text({ text: '', style: new TextStyle({
       fontFamily: 'monospace', fontSize: 48, fontWeight: 'bold',
       fill: this.neonCyan,
+      wordWrap: true,
+      align: 'center',
       dropShadow: { color: this.neonCyan, blur: 16, distance: 0 },
     })});
     this.storyOverlayTitle.anchor.set(0.5, 0.5);
     this.storyOverlaySubtitle = new Text({ text: '', style: new TextStyle({
-      fontFamily: 'monospace', fontSize: 20, fill: 0xcccccc,
+      fontFamily: 'monospace', fontSize: 20, fill: 0xcccccc, wordWrap: true, align: 'center',
     })});
     this.storyOverlaySubtitle.anchor.set(0.5, 0.5);
     this.storyOverlayContainer.addChild(this.storyOverlayBg);
@@ -217,7 +226,7 @@ export class HUD {
     })});
     this.storyFailedTitle.anchor.set(0.5, 0.5);
     this.storyFailedHint = new Text({ text: 'ENTER / ▶ GO to retry  ·  ESC / ✕ BACK for menu', style: new TextStyle({
-      fontFamily: 'monospace', fontSize: 18, fill: 0x999999,
+      fontFamily: 'monospace', fontSize: 18, fill: 0x999999, wordWrap: true, align: 'center',
     })});
     this.storyFailedHint.anchor.set(0.5, 0.5);
     this.storyFailedContainer.addChild(this.storyFailedBg);
@@ -930,73 +939,93 @@ export class HUD {
   }
 
   setPosition(screenWidth: number, screenHeight: number): void {
-    // Responsive scale factor for mobile (reference: 1024px width)
-    const scale = Math.max(0.5, Math.min(1, screenWidth / 1024));
     const isMobile = screenWidth < 768;
+    const compactScale = Math.min(screenWidth / 430, screenHeight / 932);
+    const scale = isMobile ? Math.max(0.72, Math.min(1, compactScale)) : 1;
+    const timerScale = isMobile ? Math.max(0.8, Math.min(1, scale + 0.08)) : 1;
+    const overlayScale = isMobile ? Math.max(0.76, scale) : 1;
+    const padding = isMobile ? 14 : 20;
+    const panelGap = Math.round(10 * scale);
+    const miniMapScale = isMobile ? Math.max(0.68, Math.min(0.92, Math.min(screenWidth / 430, screenHeight / 920))) : 1;
+    const miniMapBottom = padding + 150 * miniMapScale;
+    const speedHeight = 80 * scale;
+    const rpmHeight = 46 * scale;
+    const overlayWrapWidth = (screenWidth * 0.82) / overlayScale;
 
-    // Scale speed panel for mobile
     this.speedContainer.scale.set(scale);
     this.rpmContainer.scale.set(scale);
     this.surfaceContainer.scale.set(scale);
+    this.speedContainer.position.set(padding, padding);
+    this.rpmContainer.position.set(padding, padding + speedHeight + panelGap);
+    this.surfaceContainer.position.set(padding, padding + speedHeight + rpmHeight + panelGap * 2);
 
-    // Drift display at bottom center (higher on mobile to avoid touch controls)
-    const driftY = isMobile ? screenHeight - 180 : screenHeight - 100;
+    const driftY = screenHeight - (isMobile ? Math.max(170, screenHeight * 0.28) : 100);
     this.driftContainer.position.set(screenWidth / 2, driftY);
     this.driftContainer.scale.set(scale);
 
-    // Race timer at top center
-    this.raceTimerContainer.position.set(screenWidth / 2, 15);
-    this.raceTimerContainer.scale.set(scale);
+    this.raceTimerContainer.position.set(screenWidth / 2, padding + 4);
+    this.raceTimerContainer.scale.set(timerScale);
 
-    // Direction arrow below timer
-    this.arrowGraphics.position.set(screenWidth / 2, isMobile ? 80 : 100);
+    this.arrowGraphics.position.set(screenWidth / 2, padding + (isMobile ? 84 : 100) * timerScale);
 
-    // Overlay at center
     this.overlayContainer.position.set(screenWidth / 2, screenHeight / 2);
-    this.overlayContainer.scale.set(scale);
+    this.overlayContainer.scale.set(overlayScale);
+    this.overlayTitle.style.wordWrap = true;
+    this.overlayTitle.style.wordWrapWidth = overlayWrapWidth;
+    this.overlayTitle.style.align = 'center';
+    this.overlaySubtitle.style.wordWrap = true;
+    this.overlaySubtitle.style.wordWrapWidth = overlayWrapWidth;
+    this.overlaySubtitle.style.align = 'center';
+    this.overlayBest.style.wordWrap = true;
+    this.overlayBest.style.wordWrapWidth = overlayWrapWidth;
+    this.overlayBest.style.align = 'center';
 
-    // Countdown at center
     this.countdownText.position.set(screenWidth / 2, screenHeight / 2);
-    this.countdownText.scale.set(scale);
+    this.countdownText.scale.set(overlayScale);
 
-    // Sound hint at bottom
-    this.soundHintText.position.set(screenWidth / 2 - 70 * scale, screenHeight - 30);
+    this.soundHintText.style.wordWrapWidth = screenWidth * 0.55;
+    this.soundHintText.position.set(screenWidth / 2, screenHeight - (isMobile ? 140 : 28));
     this.soundHintText.scale.set(scale);
 
-    // Position display (top right, left of minimap — closer on mobile)
-    const posX = isMobile ? screenWidth - 180 : screenWidth - 280;
-    this.positionContainer.position.set(posX, 20);
+    const positionY = isMobile ? miniMapBottom + 12 : padding;
+    this.positionContainer.position.set(screenWidth - padding - 90 * scale, positionY);
     this.positionContainer.scale.set(scale);
 
-    // Standings below position
-    this.standingsContainer.position.set(posX, 20 + 70 * scale);
+    this.standingsContainer.position.set(
+      screenWidth - padding - 140 * scale,
+      positionY + 70 * scale
+    );
     this.standingsContainer.scale.set(scale);
 
-    // Story HUD positions
-    this.missionTitleText.position.set(screenWidth / 2, screenHeight / 2);
+    this.missionTitleText.style.wordWrapWidth = (screenWidth * 0.82) / scale;
+    this.missionTitleText.position.set(screenWidth / 2, screenHeight * (isMobile ? 0.44 : 0.5));
     this.missionTitleText.scale.set(scale);
-    this.chapterTitleText.position.set(screenWidth / 2, screenHeight / 2 - 50 * scale);
+    this.chapterTitleText.style.wordWrapWidth = (screenWidth * 0.82) / scale;
+    this.chapterTitleText.position.set(screenWidth / 2, this.missionTitleText.y - 52 * scale);
     this.chapterTitleText.scale.set(scale);
-    this.objectiveText.position.set(screenWidth / 2, isMobile ? 70 : 90);
+    this.objectiveText.style.wordWrapWidth = (screenWidth * 0.68) / scale;
+    this.objectiveText.position.set(screenWidth / 2, padding + (isMobile ? 86 : 94) * timerScale);
     this.objectiveText.scale.set(scale);
 
-    // Story overlays
     this.storyOverlayBg.clear();
     this.storyOverlayBg.beginFill(0x000000, 0.7);
     this.storyOverlayBg.drawRect(0, 0, screenWidth, screenHeight);
     this.storyOverlayBg.endFill();
-    this.storyOverlayTitle.position.set(screenWidth / 2, screenHeight / 2 - 30);
-    this.storyOverlayTitle.scale.set(scale);
-    this.storyOverlaySubtitle.position.set(screenWidth / 2, screenHeight / 2 + 50);
+    this.storyOverlayTitle.style.wordWrapWidth = (screenWidth * 0.86) / overlayScale;
+    this.storyOverlayTitle.position.set(screenWidth / 2, screenHeight / 2 - 32 * overlayScale);
+    this.storyOverlayTitle.scale.set(overlayScale);
+    this.storyOverlaySubtitle.style.wordWrapWidth = (screenWidth * 0.8) / overlayScale;
+    this.storyOverlaySubtitle.position.set(screenWidth / 2, screenHeight / 2 + 52 * overlayScale);
     this.storyOverlaySubtitle.scale.set(scale);
 
     this.storyFailedBg.clear();
     this.storyFailedBg.beginFill(0x000000, 0.7);
     this.storyFailedBg.drawRect(0, 0, screenWidth, screenHeight);
     this.storyFailedBg.endFill();
-    this.storyFailedTitle.position.set(screenWidth / 2, screenHeight / 2 - 20);
-    this.storyFailedTitle.scale.set(scale);
-    this.storyFailedHint.position.set(screenWidth / 2, screenHeight / 2 + 40);
+    this.storyFailedTitle.position.set(screenWidth / 2, screenHeight / 2 - 24 * overlayScale);
+    this.storyFailedTitle.scale.set(overlayScale);
+    this.storyFailedHint.style.wordWrapWidth = (screenWidth * 0.8) / scale;
+    this.storyFailedHint.position.set(screenWidth / 2, screenHeight / 2 + 44 * scale);
     this.storyFailedHint.scale.set(scale);
   }
 }
