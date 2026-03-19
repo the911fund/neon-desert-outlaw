@@ -9,6 +9,8 @@ export interface MainMenuCallbacks {
 interface MenuItem {
   label: string;
   action: () => void;
+  container: Container;
+  background: Graphics;
   text: Text;
 }
 
@@ -35,26 +37,27 @@ export class MainMenu {
   private selectedIndex = 0;
   private pulseTime = 0;
 
-  // "Coming Soon" toast
   private toastText: Text;
   private toastTimer = 0;
 
-  // Controls overlay
   private controlsContainer: Container;
   private controlsBg: Graphics;
+  private controlsCard: Graphics;
   private controlsTitle: Text;
   private controlsBody: Text;
+  private controlsHintButton: Container;
+  private controlsHintBg: Graphics;
   private controlsHint: Text;
 
-  // Animated particles
   private particleGraphics: Graphics;
   private particles: Particle[] = [];
 
   private callbacks: MainMenuCallbacks;
   private screenWidth = 0;
   private screenHeight = 0;
+  private buttonWidth = 320;
+  private buttonHeight = 64;
 
-  // Keyboard state
   private onKeyDown: (e: KeyboardEvent) => void;
   private showingControls = false;
 
@@ -62,15 +65,12 @@ export class MainMenu {
     this.callbacks = callbacks;
     this.container = new Container();
 
-    // Background
     this.bg = new Graphics();
     this.container.addChild(this.bg);
 
-    // Particle layer
     this.particleGraphics = new Graphics();
     this.container.addChild(this.particleGraphics);
 
-    // Title
     this.titleText = new Text({
       text: 'NEON DESERT OUTLAW',
       style: new TextStyle({
@@ -78,6 +78,7 @@ export class MainMenu {
         fontSize: 64,
         fontWeight: 'bold',
         fill: NEON_CYAN,
+        align: 'center',
         dropShadow: {
           color: NEON_CYAN,
           blur: 24,
@@ -88,24 +89,22 @@ export class MainMenu {
     this.titleText.anchor.set(0.5, 0.5);
     this.container.addChild(this.titleText);
 
-    // Subtitle
     this.subtitleText = new Text({
       text: 'A Desert Racing Game',
       style: new TextStyle({
         fontFamily: 'monospace',
         fontSize: 20,
         fill: 0x888888,
+        align: 'center',
       }),
     });
     this.subtitleText.anchor.set(0.5, 0.5);
     this.container.addChild(this.subtitleText);
 
-    // Menu items
     this.createMenuItem('QUICK RACE', () => this.callbacks.onQuickRace());
     this.createMenuItem('STORY MODE', () => this.handleStoryMode());
     this.createMenuItem('CONTROLS', () => this.callbacks.onControls());
 
-    // Toast text for "Coming Soon"
     this.toastText = new Text({
       text: 'Coming Soon...',
       style: new TextStyle({
@@ -124,12 +123,12 @@ export class MainMenu {
     this.toastText.visible = false;
     this.container.addChild(this.toastText);
 
-    // Controls overlay (rendered within the menu container)
     this.controlsContainer = new Container();
     this.controlsContainer.visible = false;
 
     this.controlsBg = new Graphics();
-    this.controlsContainer.addChild(this.controlsBg);
+    this.controlsCard = new Graphics();
+    this.controlsContainer.addChild(this.controlsBg, this.controlsCard);
 
     this.controlsTitle = new Text({
       text: 'CONTROLS',
@@ -150,50 +149,55 @@ export class MainMenu {
 
     this.controlsBody = new Text({
       text: [
-        '--- KEYBOARD ---',
-        'WASD / Arrow Keys .... Drive',
-        'Space ................ Handbrake',
-        'M .................... Toggle Sound',
-        'Enter ................ Start Race',
-        'ESC .................. Back to Menu',
+        'KEYBOARD',
+        'WASD / Arrows  Drive',
+        'Space          Handbrake',
+        'M              Toggle Sound',
+        'Enter          Start / Confirm',
+        'Esc            Back to Menu',
         '',
-        '--- MOBILE / TOUCH ---',
-        'Left Joystick ........ Steer & Throttle',
-        'B Button ............. Brake',
-        'H Button ............. Handbrake',
-        '▶ GO Button .......... Start Race',
-        '✕ BACK Button ........ Back to Menu',
+        'TOUCH',
+        'Left Pad       Steer + Throttle',
+        'Brake          Slow / Reverse',
+        'Drift          Handbrake slide',
+        'Back           Return to Menu',
+        'Go             Start / Retry',
       ].join('\n'),
       style: new TextStyle({
         fontFamily: 'monospace',
         fontSize: 20,
         fill: 0xcccccc,
         lineHeight: 34,
+        align: 'center',
+        wordWrap: true,
+        wordWrapWidth: 460,
       }),
     });
-    this.controlsBody.anchor.set(0.5, 0.5);
+    this.controlsBody.anchor.set(0.5, 0);
     this.controlsContainer.addChild(this.controlsBody);
 
+    this.controlsHintButton = new Container();
+    this.controlsHintBg = new Graphics();
     this.controlsHint = new Text({
-      text: 'Press ESC / ENTER or tap here to go back',
+      text: 'BACK',
       style: new TextStyle({
         fontFamily: 'monospace',
         fontSize: 16,
-        fill: DIM_CYAN,
+        fontWeight: 'bold',
+        fill: NEON_CYAN,
       }),
     });
     this.controlsHint.anchor.set(0.5, 0.5);
-    this.controlsHint.eventMode = 'static';
-    this.controlsHint.cursor = 'pointer';
-    this.controlsHint.on('pointerdown', () => this.hideControls());
-    this.controlsContainer.addChild(this.controlsHint);
+    this.controlsHintButton.addChild(this.controlsHintBg, this.controlsHint);
+    this.controlsHintBg.eventMode = 'static';
+    this.controlsHintBg.cursor = 'pointer';
+    this.controlsHintBg.on('pointertap', () => this.hideControls());
+    this.controlsContainer.addChild(this.controlsHintButton);
 
     this.container.addChild(this.controlsContainer);
 
-    // Init particles
     this.initParticles();
 
-    // Keyboard listener
     this.onKeyDown = (e: KeyboardEvent): void => {
       if (!this.container.visible) return;
 
@@ -204,7 +208,6 @@ export class MainMenu {
         return;
       }
 
-      // Toast is showing — ignore input
       if (this.toastTimer > 0) return;
 
       switch (e.code) {
@@ -219,7 +222,7 @@ export class MainMenu {
           this.updateSelection();
           break;
         case 'Enter':
-          this.items[this.selectedIndex].action();
+          this.items[this.selectedIndex]?.action();
           break;
       }
     };
@@ -228,7 +231,13 @@ export class MainMenu {
     this.updateSelection();
   }
 
+  private clamp(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value));
+  }
+
   private createMenuItem(label: string, action: () => void): void {
+    const container = new Container();
+    const background = new Graphics();
     const text = new Text({
       text: label,
       style: new TextStyle({
@@ -239,17 +248,46 @@ export class MainMenu {
       }),
     });
     text.anchor.set(0.5, 0.5);
-    text.eventMode = 'static';
-    text.cursor = 'pointer';
+
+    background.eventMode = 'static';
+    background.cursor = 'pointer';
+
     const idx = this.items.length;
-    text.on('pointerdown', () => {
+    background.on('pointertap', () => {
       this.selectedIndex = idx;
       this.updateSelection();
-      this.items[idx].action();
+      this.items[idx]?.action();
     });
-    this.container.addChild(text);
 
-    this.items.push({ label, action, text });
+    container.addChild(background, text);
+    this.container.addChild(container);
+    this.items.push({ label, action, container, background, text });
+  }
+
+  private drawMenuButton(item: MenuItem, selected: boolean): void {
+    item.background.clear();
+    item.background.beginFill(0x08151b, selected ? 0.9 : 0.76);
+    item.background.drawRoundedRect(
+      -this.buttonWidth / 2,
+      -this.buttonHeight / 2,
+      this.buttonWidth,
+      this.buttonHeight,
+      14
+    );
+    item.background.endFill();
+    item.background.lineStyle(2, selected ? NEON_MAGENTA : NEON_CYAN, selected ? 0.9 : 0.38);
+    item.background.drawRoundedRect(
+      -this.buttonWidth / 2,
+      -this.buttonHeight / 2,
+      this.buttonWidth,
+      this.buttonHeight,
+      14
+    );
+
+    item.text.style.fill = selected ? NEON_MAGENTA : 0xd8fafa;
+    item.text.style.dropShadow = selected
+      ? { color: NEON_MAGENTA, blur: 12, distance: 0, alpha: 1, angle: 0 }
+      : false;
   }
 
   private handleStoryMode(): void {
@@ -259,11 +297,10 @@ export class MainMenu {
   showControls(): void {
     this.showingControls = true;
     this.controlsContainer.visible = true;
-    // Hide menu items behind controls
     this.titleText.visible = false;
     this.subtitleText.visible = false;
     for (const item of this.items) {
-      item.text.visible = false;
+      item.container.visible = false;
     }
     this.toastText.visible = false;
     this.layoutControls();
@@ -275,22 +312,51 @@ export class MainMenu {
     this.titleText.visible = true;
     this.subtitleText.visible = true;
     for (const item of this.items) {
-      item.text.visible = true;
+      item.container.visible = true;
     }
   }
 
   private layoutControls(): void {
-    const cx = this.screenWidth / 2;
-    const cy = this.screenHeight / 2;
+    const isPhone = this.screenWidth < 560;
+    const cardWidth = Math.min(this.screenWidth - 24, isPhone ? 420 : 560);
+    const cardHeight = Math.min(this.screenHeight - 24, isPhone ? 560 : 620);
+    const cardX = (this.screenWidth - cardWidth) / 2;
+    const cardY = (this.screenHeight - cardHeight) / 2;
+    const titleSize = isPhone ? 32 : 48;
+    const bodySize = isPhone ? 14 : 20;
+    const lineHeight = isPhone ? 22 : 34;
+    const hintWidth = Math.min(cardWidth - 36, 180);
+    const hintHeight = 48;
 
     this.controlsBg.clear();
-    this.controlsBg.beginFill(BG_COLOR, 0.95);
+    this.controlsBg.beginFill(BG_COLOR, 0.96);
     this.controlsBg.drawRect(0, 0, this.screenWidth, this.screenHeight);
     this.controlsBg.endFill();
 
-    this.controlsTitle.position.set(cx, cy - 160);
-    this.controlsBody.position.set(cx, cy + 10);
-    this.controlsHint.position.set(cx, cy + 180);
+    this.controlsCard.clear();
+    this.controlsCard.beginFill(0x08151b, 0.94);
+    this.controlsCard.drawRoundedRect(cardX, cardY, cardWidth, cardHeight, 18);
+    this.controlsCard.endFill();
+    this.controlsCard.lineStyle(2, NEON_CYAN, 0.55);
+    this.controlsCard.drawRoundedRect(cardX, cardY, cardWidth, cardHeight, 18);
+
+    this.controlsTitle.style.fontSize = titleSize;
+    this.controlsTitle.position.set(this.screenWidth / 2, cardY + 52);
+
+    this.controlsBody.style.fontSize = bodySize;
+    this.controlsBody.style.lineHeight = lineHeight;
+    this.controlsBody.style.wordWrapWidth = cardWidth - 40;
+    this.controlsBody.position.set(this.screenWidth / 2, cardY + 96);
+
+    this.controlsHintBg.clear();
+    this.controlsHintBg.beginFill(0x08151b, 1);
+    this.controlsHintBg.drawRoundedRect(-hintWidth / 2, -hintHeight / 2, hintWidth, hintHeight, 12);
+    this.controlsHintBg.endFill();
+    this.controlsHintBg.lineStyle(2, NEON_CYAN, 0.6);
+    this.controlsHintBg.drawRoundedRect(-hintWidth / 2, -hintHeight / 2, hintWidth, hintHeight, 12);
+
+    this.controlsHint.style.fontSize = isPhone ? 15 : 16;
+    this.controlsHintButton.position.set(this.screenWidth / 2, cardY + cardHeight - 42);
   }
 
   private initParticles(): void {
@@ -308,11 +374,7 @@ export class MainMenu {
   private updateSelection(): void {
     for (let i = 0; i < this.items.length; i++) {
       const item = this.items[i];
-      const selected = i === this.selectedIndex;
-      item.text.style.fill = selected ? NEON_MAGENTA : DIM_CYAN;
-      item.text.style.dropShadow = selected
-        ? { color: NEON_MAGENTA, blur: 12, distance: 0, alpha: 1, angle: 0 }
-        : false;
+      this.drawMenuButton(item, i === this.selectedIndex);
     }
   }
 
@@ -320,42 +382,39 @@ export class MainMenu {
     this.screenWidth = width;
     this.screenHeight = height;
 
-    // Draw background
     this.bg.clear();
     this.bg.beginFill(BG_COLOR);
     this.bg.drawRect(0, 0, width, height);
     this.bg.endFill();
 
     const cx = width / 2;
+    const isPhone = width < 560;
+    const titleSize = isPhone
+      ? Math.round(this.clamp(width * 0.11, 34, 44))
+      : Math.round(this.clamp(width * 0.065, 48, 64));
+    const subtitleSize = isPhone ? 16 : Math.round(this.clamp(width * 0.022, 18, 20));
 
-    // Responsive scale factor for mobile (reference: 1024px width)
-    const scale = Math.min(1, width / 1024);
-    const mobileScale = Math.max(0.5, scale);
+    this.titleText.text = isPhone ? 'NEON DESERT\nOUTLAW' : 'NEON DESERT OUTLAW';
+    this.titleText.style.fontSize = titleSize;
+    this.subtitleText.style.fontSize = subtitleSize;
 
-    // Scale title for mobile
-    this.titleText.style.fontSize = Math.round(64 * mobileScale);
-    this.subtitleText.style.fontSize = Math.round(20 * mobileScale);
+    this.titleText.position.set(cx, isPhone ? height * 0.18 : height * 0.22);
+    this.subtitleText.position.set(cx, this.titleText.y + (isPhone ? 52 : 58));
 
-    // Scale menu items
-    for (const item of this.items) {
-      item.text.style.fontSize = Math.round(28 * mobileScale);
-    }
+    this.buttonWidth = Math.min(width - 32, isPhone ? 320 : 360);
+    this.buttonHeight = isPhone ? 58 : 64;
+    const itemSpacing = this.buttonHeight + (isPhone ? 14 : 18);
+    const menuStartY = isPhone ? height * 0.44 : height * 0.5;
 
-    // Title position
-    this.titleText.position.set(cx, height * 0.22);
-    const subtitleGap = 55 * mobileScale;
-    this.subtitleText.position.set(cx, height * 0.22 + subtitleGap);
-
-    // Menu items
-    const menuStartY = height * 0.50;
-    const itemSpacing = Math.round(55 * mobileScale);
     for (let i = 0; i < this.items.length; i++) {
-      this.items[i].text.position.set(cx, menuStartY + i * itemSpacing);
+      const item = this.items[i];
+      item.text.style.fontSize = isPhone ? 22 : 28;
+      item.container.position.set(cx, menuStartY + i * itemSpacing);
     }
+    this.updateSelection();
 
-    // Toast
-    this.toastText.style.fontSize = Math.round(24 * mobileScale);
-    this.toastText.position.set(cx, menuStartY + this.items.length * itemSpacing + 40);
+    this.toastText.style.fontSize = isPhone ? 20 : 24;
+    this.toastText.position.set(cx, menuStartY + this.items.length * itemSpacing + 28);
 
     if (this.showingControls) {
       this.layoutControls();
@@ -365,21 +424,18 @@ export class MainMenu {
   update(dt: number): void {
     this.pulseTime += dt;
 
-    // Pulse animation on selected item
     const selectedItem = this.items[this.selectedIndex];
     if (selectedItem) {
-      const scale = 1 + Math.sin(this.pulseTime * 4) * 0.04;
-      selectedItem.text.scale.set(scale, scale);
+      const scale = 1 + Math.sin(this.pulseTime * 4) * 0.03;
+      selectedItem.container.scale.set(scale, scale);
     }
 
-    // Reset non-selected items scale
     for (let i = 0; i < this.items.length; i++) {
       if (i !== this.selectedIndex) {
-        this.items[i].text.scale.set(1, 1);
+        this.items[i].container.scale.set(1, 1);
       }
     }
 
-    // Toast timer
     if (this.toastTimer > 0) {
       this.toastTimer -= dt;
       if (this.toastTimer <= 0.5) {
@@ -391,19 +447,20 @@ export class MainMenu {
       }
     }
 
-    // Animate particles
     this.particleGraphics.clear();
     for (const p of this.particles) {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
 
-      // Wrap around screen
       if (p.x < 0) p.x = this.screenWidth;
       if (p.x > this.screenWidth) p.x = 0;
       if (p.y < 0) p.y = this.screenHeight;
       if (p.y > this.screenHeight) p.y = 0;
 
-      this.particleGraphics.beginFill(NEON_CYAN, p.alpha * (0.5 + 0.5 * Math.sin(this.pulseTime * 2 + p.x * 0.01)));
+      this.particleGraphics.beginFill(
+        NEON_CYAN,
+        p.alpha * (0.5 + 0.5 * Math.sin(this.pulseTime * 2 + p.x * 0.01))
+      );
       this.particleGraphics.drawCircle(p.x, p.y, 1.5);
       this.particleGraphics.endFill();
     }

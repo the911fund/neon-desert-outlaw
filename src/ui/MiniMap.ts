@@ -1,5 +1,6 @@
 import { Container, Graphics } from 'pixi.js';
-import { SurfaceType, SurfaceColors } from '../physics/SurfaceTypes';
+import { SurfaceColors } from '../physics/SurfaceTypes';
+import type { SurfaceType } from '../physics/SurfaceTypes';
 
 export interface MiniMapChunk {
   x: number;
@@ -133,8 +134,6 @@ export class MiniMap {
   private drawTerrain(state: MiniMapState): void {
     this.terrain.clear();
 
-    const centerX = this.size / 2;
-    const centerY = this.size / 2;
     const viewRadius = this.size / 2 / this.scale;
 
     // Draw simplified terrain based on surface grid
@@ -252,12 +251,14 @@ export class MiniMap {
   }
 
   setPosition(screenWidth: number, screenHeight: number): void {
-    // Scale down on mobile screens
-    const scale = screenWidth < 768 ? 0.65 : 1;
+    const compactScale = Math.min(screenWidth / 430, screenHeight / 920);
+    const scale = screenWidth < 768
+      ? Math.max(0.68, Math.min(0.92, compactScale))
+      : 1;
     this.container.scale.set(scale);
 
-    // Position in top-right corner with padding
     const effectiveSize = this.size * scale;
-    this.container.position.set(screenWidth - effectiveSize - 16, 16);
+    const padding = screenWidth < 768 ? 14 : 16;
+    this.container.position.set(screenWidth - effectiveSize - padding, padding);
   }
 }

@@ -2,6 +2,7 @@ import { Application } from 'pixi.js';
 import { Game } from './game/Game';
 import { GameModeManager, GameMode } from './game/GameModeManager';
 import { MainMenu } from './ui/MainMenu';
+import { getViewportSize } from './utils/viewport';
 
 const root = document.getElementById('app');
 if (!root) {
@@ -57,8 +58,13 @@ app
     });
 
     // Initial state: show menu
+    const resizeMenu = (): void => {
+      const viewport = getViewportSize();
+      menu.resize(viewport.width, viewport.height);
+    };
+
     menu.container.visible = true;
-    menu.resize(window.innerWidth, window.innerHeight);
+    resizeMenu();
 
     // Menu update loop
     app.ticker.add(() => {
@@ -69,9 +75,8 @@ app
     });
 
     // Handle resize for menu
-    window.addEventListener('resize', () => {
-      menu.resize(window.innerWidth, window.innerHeight);
-    });
+    window.addEventListener('resize', resizeMenu);
+    window.visualViewport?.addEventListener('resize', resizeMenu);
   })
   .catch((error) => {
     console.error('Failed to initialize Pixi application', error);

@@ -1,4 +1,12 @@
-import { Container, Graphics, Text, TextStyle, FederatedPointerEvent } from 'pixi.js';
+import {
+  Circle,
+  Container,
+  Graphics,
+  RoundedRectangle,
+  Text,
+  TextStyle,
+} from 'pixi.js';
+import type { FederatedPointerEvent } from 'pixi.js';
 import { clamp } from '../utils/MathUtils';
 
 export interface TouchInput {
@@ -13,69 +21,100 @@ export interface TouchActionCallbacks {
   onBack?: () => void;
 }
 
+interface ActionButtonRefs {
+  container: Container;
+  background: Graphics;
+  label: Text;
+}
+
+interface ControlButtonRefs {
+  container: Container;
+  background: Graphics;
+  label: Text;
+}
+
 export class TouchControls {
   readonly container: Container;
 
   private joystickContainer: Container;
   private joystickBase: Graphics;
   private joystickKnob: Graphics;
+  private joystickHint: Text;
 
-  private brakeButton: Graphics;
-  private handbrakeButton: Graphics;
+  private brakeButton: ControlButtonRefs;
+  private handbrakeButton: ControlButtonRefs;
 
-  // Action buttons for mobile navigation
-  private backButton: Container;
-  private enterButton: Container;
+  private backButton: ActionButtonRefs;
+  private enterButton: ActionButtonRefs;
 
-  private readonly joystickRadius = 60;
-  private readonly knobRadius = 25;
-  private readonly buttonRadius = 40;
-  private readonly actionButtonWidth = 70;
-  private readonly actionButtonHeight = 36;
+  private joystickBaseRadius = 70;
+  private joystickKnobRadius = 30;
+  private buttonRadius = 46;
+  private actionButtonWidth = 100;
+  private actionButtonHeight = 48;
+  private controlPadding = 18;
+  private bottomPadding = 24;
+  private screenWidth = 0;
+  private screenHeight = 0;
+  private joystickCenter = { x: 0, y: 0 };
+
   private readonly neonCyan = 0x00ffff;
   private readonly neonMagenta = 0xff00ff;
   private readonly neonRed = 0xff4444;
   private readonly neonGreen = 0x44ff44;
 
-  private joystickActive = false;
   private joystickTouchId: number | null = null;
   private joystickOffset = { x: 0, y: 0 };
-
-  private brakeActive = false;
-  private handbrakeActive = false;
+  private brakeTouchId: number | null = null;
+  private handbrakeTouchId: number | null = null;
 
   private isTouchDevice = false;
   private _visible = false;
+  private backButtonVisible = true;
+  private enterButtonVisible = true;
   private callbacks: TouchActionCallbacks = {};
 
   constructor(callbacks?: TouchActionCallbacks) {
     this.container = new Container();
     if (callbacks) this.callbacks = callbacks;
 
-    // Detect touch capability
     this.isTouchDevice = this.detectTouchDevice();
 
     this.joystickContainer = new Container();
     this.joystickBase = new Graphics();
     this.joystickKnob = new Graphics();
+    this.joystickHint = new Text({
+      text: 'STEER / GAS',
+      style: new TextStyle({
+        fontFamily: 'monospace',
+        fontSize: 14,
+        fontWeight: 'bold',
+        fill: this.neonCyan,
+      }),
+    });
+    this.joystickHint.anchor.set(0.5, 0.5);
 
-    this.brakeButton = new Graphics();
-    this.handbrakeButton = new Graphics();
+    this.brakeButton = this.createControlButton('BRAKE', this.neonRed);
+    this.handbrakeButton = this.createControlButton('DRIFT', this.neonMagenta);
 
-    // Action buttons
-    this.backButton = this.createActionButton('✕ BACK', this.neonRed, () => this.callbacks.onBack?.());
-    this.enterButton = this.createActionButton('▶ GO', this.neonGreen, () => this.callbacks.onEnter?.());
+    this.backButton = this.createActionButton('BACK', this.neonRed, () => this.callbacks.onBack?.());
+    this.enterButton = this.createActionButton('GO', this.neonGreen, () => this.callbacks.onEnter?.());
 
-    this.setupJoystick();
-    this.setupButtons();
+    this.joystickContainer.addChild(this.joystickBase, this.joystickKnob, this.joystickHint);
+    this.container.addChild(
+      this.joystickContainer,
+      this.brakeButton.container,
+      this.handbrakeButton.container,
+      this.backButton.container,
+      this.enterButton.container
+    );
 
-    this.container.addChild(this.joystickContainer);
-    this.container.addChild(this.brakeButton);
-    this.container.addChild(this.handbrakeButton);
-    this.container.addChild(this.backButton);
-    this.container.addChild(this.enterButton);
+    this.redrawJoystick();
+    this.redrawControlButton(this.brakeButton, this.neonRed, false);
+    this.redrawControlButton(this.handbrakeButton, this.neonMagenta, false);
+    this.redrawActionButton(this.backButton, this.neonRed);
+    this.redrawActionButton(this.enterButton, this.neonGreen);
 
-    // Initially hide if not touch device
     this.container.visible = this.isTouchDevice;
     this._visible = this.isTouchDevice;
 
@@ -97,247 +136,324 @@ export class TouchControls {
     );
   }
 
-  private createActionButton(label: string, color: number, onTap: () => void): Container {
-    const btn = new Container();
-    const bg = new Graphics();
-    bg.beginFill(0x1a1a1a, 0.7);
-    bg.drawRoundedRect(-this.actionButtonWidth / 2, -this.actionButtonHeight / 2,
-      this.actionButtonWidth, this.actionButtonHeight, 8);
-    bg.endFill();
-    bg.lineStyle(2, color, 0.7);
-    bg.drawRoundedRect(-this.actionButtonWidth / 2, -this.actionButtonHeight / 2,
-      this.actionButtonWidth, this.actionButtonHeight, 8);
-    btn.addChild(bg);
-
+  private createControlButton(label: string, color: number): ControlButtonRefs {
+    const container = new Container();
+    const background = new Graphics();
     const text = new Text({
       text: label,
       style: new TextStyle({
         fontFamily: 'monospace',
-        fontSize: 14,
+        fontSize: 16,
+        fontWeight: 'bold',
+        fill: color,
+        align: 'center',
+      }),
+    });
+    text.anchor.set(0.5, 0.5);
+
+    container.addChild(background, text);
+    return { container, background, label: text };
+  }
+
+  private createActionButton(label: string, color: number, onTap: () => void): ActionButtonRefs {
+    const container = new Container();
+    const background = new Graphics();
+    const text = new Text({
+      text: label,
+      style: new TextStyle({
+        fontFamily: 'monospace',
+        fontSize: 16,
         fontWeight: 'bold',
         fill: color,
       }),
     });
     text.anchor.set(0.5, 0.5);
-    btn.addChild(text);
 
-    bg.eventMode = 'static';
-    bg.cursor = 'pointer';
-    bg.on('pointerdown', () => onTap());
+    background.eventMode = 'static';
+    background.cursor = 'pointer';
+    background.on('pointertap', () => onTap());
 
-    return btn;
+    container.addChild(background, text);
+    return { container, background, label: text };
   }
 
-  private setupJoystick(): void {
-    // Joystick base (outer circle)
-    this.joystickBase.beginFill(0x1a1a1a, 0.6);
-    this.joystickBase.drawCircle(0, 0, this.joystickRadius);
+  private redrawJoystick(): void {
+    this.joystickBase.clear();
+    this.joystickBase.beginFill(0x09141b, 0.78);
+    this.joystickBase.drawCircle(0, 0, this.joystickBaseRadius);
     this.joystickBase.endFill();
+    this.joystickBase.beginFill(this.neonCyan, 0.08);
+    this.joystickBase.drawCircle(0, 0, this.joystickBaseRadius - 6);
+    this.joystickBase.endFill();
+    this.joystickBase.lineStyle(3, this.neonCyan, 0.55);
+    this.joystickBase.drawCircle(0, 0, this.joystickBaseRadius);
+    this.joystickBase.lineStyle(1, this.neonCyan, 0.22);
+    this.joystickBase.drawCircle(0, 0, this.joystickBaseRadius * 0.7);
+    this.joystickBase.moveTo(-this.joystickBaseRadius * 0.55, 0);
+    this.joystickBase.lineTo(this.joystickBaseRadius * 0.55, 0);
+    this.joystickBase.moveTo(0, -this.joystickBaseRadius * 0.55);
+    this.joystickBase.lineTo(0, this.joystickBaseRadius * 0.55);
+    this.joystickBase.hitArea = new Circle(0, 0, this.joystickBaseRadius + 16);
 
-    this.joystickBase.lineStyle(2, this.neonCyan, 0.4);
-    this.joystickBase.drawCircle(0, 0, this.joystickRadius);
-
-    // Direction indicators
-    this.joystickBase.lineStyle(1, this.neonCyan, 0.3);
-    // Up arrow
-    this.joystickBase.moveTo(0, -this.joystickRadius + 15);
-    this.joystickBase.lineTo(-5, -this.joystickRadius + 22);
-    this.joystickBase.moveTo(0, -this.joystickRadius + 15);
-    this.joystickBase.lineTo(5, -this.joystickRadius + 22);
-    // Down arrow
-    this.joystickBase.moveTo(0, this.joystickRadius - 15);
-    this.joystickBase.lineTo(-5, this.joystickRadius - 22);
-    this.joystickBase.moveTo(0, this.joystickRadius - 15);
-    this.joystickBase.lineTo(5, this.joystickRadius - 22);
-
-    // Joystick knob
-    this.joystickKnob.beginFill(this.neonCyan, 0.3);
-    this.joystickKnob.drawCircle(0, 0, this.knobRadius);
+    this.joystickKnob.clear();
+    this.joystickKnob.beginFill(this.neonCyan, 0.28);
+    this.joystickKnob.drawCircle(0, 0, this.joystickKnobRadius);
     this.joystickKnob.endFill();
-
-    this.joystickKnob.lineStyle(2, this.neonCyan, 0.8);
-    this.joystickKnob.drawCircle(0, 0, this.knobRadius);
-
-    // Inner knob highlight
-    this.joystickKnob.beginFill(this.neonCyan, 0.5);
-    this.joystickKnob.drawCircle(0, 0, this.knobRadius * 0.4);
+    this.joystickKnob.beginFill(this.neonCyan, 0.55);
+    this.joystickKnob.drawCircle(0, 0, this.joystickKnobRadius * 0.42);
     this.joystickKnob.endFill();
+    this.joystickKnob.lineStyle(3, this.neonCyan, 0.9);
+    this.joystickKnob.drawCircle(0, 0, this.joystickKnobRadius);
 
-    this.joystickContainer.addChild(this.joystickBase);
-    this.joystickContainer.addChild(this.joystickKnob);
-
-    // Make interactive
-    this.joystickBase.eventMode = 'static';
-    this.joystickBase.cursor = 'pointer';
+    this.joystickHint.style.fontSize = Math.max(12, Math.round(this.joystickBaseRadius * 0.24));
+    this.joystickHint.position.set(0, this.joystickBaseRadius + 18);
   }
 
-  private setupButtons(): void {
-    // Brake button (red)
-    this.drawButton(this.brakeButton, this.neonRed, 'B', false);
+  private redrawControlButton(button: ControlButtonRefs, color: number, active: boolean): void {
+    const alpha = active ? 0.92 : 0.5;
 
-    // Handbrake button (magenta)
-    this.drawButton(this.handbrakeButton, this.neonMagenta, 'H', false);
+    button.background.clear();
+    button.background.beginFill(0x120d14, 0.82);
+    button.background.drawCircle(0, 0, this.buttonRadius);
+    button.background.endFill();
 
-    // Make interactive
-    this.brakeButton.eventMode = 'static';
-    this.brakeButton.cursor = 'pointer';
-    this.handbrakeButton.eventMode = 'static';
-    this.handbrakeButton.cursor = 'pointer';
-  }
-
-  private drawButton(graphics: Graphics, color: number, _label: string, active: boolean): void {
-    graphics.clear();
-
-    const alpha = active ? 0.7 : 0.4;
-    const borderAlpha = active ? 1.0 : 0.5;
-
-    // Button background
-    graphics.beginFill(0x1a1a1a, 0.6);
-    graphics.drawCircle(0, 0, this.buttonRadius);
-    graphics.endFill();
-
-    // Colored fill when active
     if (active) {
-      graphics.beginFill(color, 0.3);
-      graphics.drawCircle(0, 0, this.buttonRadius - 4);
-      graphics.endFill();
+      button.background.beginFill(color, 0.22);
+      button.background.drawCircle(0, 0, this.buttonRadius - 6);
+      button.background.endFill();
     }
 
-    // Border
-    graphics.lineStyle(3, color, borderAlpha);
-    graphics.drawCircle(0, 0, this.buttonRadius);
+    button.background.lineStyle(3, color, alpha);
+    button.background.drawCircle(0, 0, this.buttonRadius);
+    button.background.lineStyle(1, color, 0.35);
+    button.background.drawCircle(0, 0, this.buttonRadius * 0.68);
 
-    // Inner ring
-    graphics.lineStyle(1, color, alpha * 0.5);
-    graphics.drawCircle(0, 0, this.buttonRadius * 0.6);
+    button.label.style.fontSize = Math.max(13, Math.round(this.buttonRadius * 0.34));
+    button.container.hitArea = new Circle(0, 0, this.buttonRadius + 14);
+  }
+
+  private redrawActionButton(button: ActionButtonRefs, color: number): void {
+    const radius = Math.min(16, Math.round(this.actionButtonHeight * 0.3));
+
+    button.background.clear();
+    button.background.beginFill(0x090d18, 0.9);
+    button.background.drawRoundedRect(
+      -this.actionButtonWidth / 2,
+      -this.actionButtonHeight / 2,
+      this.actionButtonWidth,
+      this.actionButtonHeight,
+      radius
+    );
+    button.background.endFill();
+    button.background.lineStyle(2, color, 0.7);
+    button.background.drawRoundedRect(
+      -this.actionButtonWidth / 2,
+      -this.actionButtonHeight / 2,
+      this.actionButtonWidth,
+      this.actionButtonHeight,
+      radius
+    );
+    button.background.hitArea = new RoundedRectangle(
+      -this.actionButtonWidth / 2,
+      -this.actionButtonHeight / 2,
+      this.actionButtonWidth,
+      this.actionButtonHeight,
+      radius
+    );
+
+    button.label.style.fontSize = Math.max(15, Math.round(this.actionButtonHeight * 0.34));
   }
 
   private setupEventListeners(): void {
-    // Joystick events
-    this.joystickBase.on('pointerdown', this.onJoystickDown.bind(this));
-    this.joystickBase.on('pointermove', this.onJoystickMove.bind(this));
-    this.joystickBase.on('pointerup', this.onJoystickUp.bind(this));
-    this.joystickBase.on('pointerupoutside', this.onJoystickUp.bind(this));
+    this.joystickBase.eventMode = 'static';
+    this.joystickBase.cursor = 'pointer';
+    this.joystickBase.on('pointerdown', this.onJoystickDown);
 
-    // Brake button events
-    this.brakeButton.on('pointerdown', this.onBrakeDown.bind(this));
-    this.brakeButton.on('pointerup', this.onBrakeUp.bind(this));
-    this.brakeButton.on('pointerupoutside', this.onBrakeUp.bind(this));
+    this.brakeButton.container.eventMode = 'static';
+    this.brakeButton.container.cursor = 'pointer';
+    this.brakeButton.container.on('pointerdown', this.onBrakeDown);
 
-    // Handbrake button events
-    this.handbrakeButton.on('pointerdown', this.onHandbrakeDown.bind(this));
-    this.handbrakeButton.on('pointerup', this.onHandbrakeUp.bind(this));
-    this.handbrakeButton.on('pointerupoutside', this.onHandbrakeUp.bind(this));
+    this.handbrakeButton.container.eventMode = 'static';
+    this.handbrakeButton.container.cursor = 'pointer';
+    this.handbrakeButton.container.on('pointerdown', this.onHandbrakeDown);
+
+    window.addEventListener('pointermove', this.onGlobalPointerMove, { passive: false });
+    window.addEventListener('pointerup', this.onGlobalPointerEnd, { passive: false });
+    window.addEventListener('pointercancel', this.onGlobalPointerEnd, { passive: false });
   }
 
-  private onJoystickDown(event: FederatedPointerEvent): void {
-    this.joystickActive = true;
+  private onJoystickDown = (event: FederatedPointerEvent): void => {
+    if (this.joystickTouchId !== null && this.joystickTouchId !== event.pointerId) {
+      return;
+    }
+
     this.joystickTouchId = event.pointerId;
-    this.updateJoystickPosition(event);
+    this.updateJoystickFromScreenPoint(event.global.x, event.global.y);
+    event.stopPropagation();
+  };
+
+  private onBrakeDown = (event: FederatedPointerEvent): void => {
+    if (this.brakeTouchId !== null && this.brakeTouchId !== event.pointerId) {
+      return;
+    }
+
+    this.brakeTouchId = event.pointerId;
+    this.redrawControlButton(this.brakeButton, this.neonRed, true);
+    event.stopPropagation();
+  };
+
+  private onHandbrakeDown = (event: FederatedPointerEvent): void => {
+    if (this.handbrakeTouchId !== null && this.handbrakeTouchId !== event.pointerId) {
+      return;
+    }
+
+    this.handbrakeTouchId = event.pointerId;
+    this.redrawControlButton(this.handbrakeButton, this.neonMagenta, true);
+    event.stopPropagation();
+  };
+
+  private onGlobalPointerMove = (event: PointerEvent): void => {
+    if (event.pointerId !== this.joystickTouchId) {
+      return;
+    }
+
+    this.updateJoystickFromScreenPoint(event.clientX, event.clientY);
+    event.preventDefault();
+  };
+
+  private onGlobalPointerEnd = (event: PointerEvent): void => {
+    if (event.pointerId === this.joystickTouchId) {
+      this.resetJoystick();
+    }
+
+    if (event.pointerId === this.brakeTouchId) {
+      this.brakeTouchId = null;
+      this.redrawControlButton(this.brakeButton, this.neonRed, false);
+    }
+
+    if (event.pointerId === this.handbrakeTouchId) {
+      this.handbrakeTouchId = null;
+      this.redrawControlButton(this.handbrakeButton, this.neonMagenta, false);
+    }
+  };
+
+  private updateJoystickFromScreenPoint(x: number, y: number): void {
+    const localX = x - this.joystickCenter.x;
+    const localY = y - this.joystickCenter.y;
+    const distance = Math.sqrt(localX * localX + localY * localY);
+    const maxDistance = this.joystickBaseRadius - this.joystickKnobRadius * 0.45;
+
+    let knobX = localX;
+    let knobY = localY;
+    if (distance > maxDistance && distance > 0) {
+      const scale = maxDistance / distance;
+      knobX *= scale;
+      knobY *= scale;
+    }
+
+    this.joystickKnob.position.set(knobX, knobY);
+    this.joystickOffset = {
+      x: knobX / maxDistance,
+      y: knobY / maxDistance,
+    };
   }
 
-  private onJoystickMove(event: FederatedPointerEvent): void {
-    if (!this.joystickActive || event.pointerId !== this.joystickTouchId) return;
-    this.updateJoystickPosition(event);
-  }
-
-  private onJoystickUp(event: FederatedPointerEvent): void {
-    if (event.pointerId !== this.joystickTouchId) return;
-    this.joystickActive = false;
+  private resetJoystick(): void {
     this.joystickTouchId = null;
     this.joystickOffset = { x: 0, y: 0 };
     this.joystickKnob.position.set(0, 0);
   }
 
-  private updateJoystickPosition(event: FederatedPointerEvent): void {
-    const localPos = this.joystickContainer.toLocal(event.global);
-
-    // Clamp to joystick radius
-    const distance = Math.sqrt(localPos.x * localPos.x + localPos.y * localPos.y);
-    const maxDistance = this.joystickRadius - this.knobRadius * 0.5;
-
-    if (distance > maxDistance) {
-      const scale = maxDistance / distance;
-      localPos.x *= scale;
-      localPos.y *= scale;
+  private applyDeadzone(value: number, deadzone: number): number {
+    const magnitude = Math.abs(value);
+    if (magnitude <= deadzone) {
+      return 0;
     }
 
-    this.joystickKnob.position.set(localPos.x, localPos.y);
-
-    // Normalize to -1 to 1
-    this.joystickOffset = {
-      x: localPos.x / maxDistance,
-      y: localPos.y / maxDistance,
-    };
+    const normalized = (magnitude - deadzone) / (1 - deadzone);
+    return Math.sign(value) * clamp(normalized, 0, 1);
   }
 
-  private onBrakeDown(): void {
-    this.brakeActive = true;
-    this.drawButton(this.brakeButton, this.neonRed, 'B', true);
-  }
+  private updateMetrics(screenWidth: number, screenHeight: number): void {
+    const shortSide = Math.min(screenWidth, screenHeight);
+    const portraitScale = clamp(shortSide / 390, 0.92, 1.12);
+    const compactScale = screenWidth > screenHeight ? 0.9 : 1;
+    const controlScale = portraitScale * compactScale;
 
-  private onBrakeUp(): void {
-    this.brakeActive = false;
-    this.drawButton(this.brakeButton, this.neonRed, 'B', false);
-  }
-
-  private onHandbrakeDown(): void {
-    this.handbrakeActive = true;
-    this.drawButton(this.handbrakeButton, this.neonMagenta, 'H', true);
-  }
-
-  private onHandbrakeUp(): void {
-    this.handbrakeActive = false;
-    this.drawButton(this.handbrakeButton, this.neonMagenta, 'H', false);
+    this.joystickBaseRadius = Math.round(70 * controlScale);
+    this.joystickKnobRadius = Math.round(30 * controlScale);
+    this.buttonRadius = Math.round(46 * controlScale);
+    this.actionButtonWidth = Math.max(88, Math.round(104 * controlScale));
+    this.actionButtonHeight = Math.max(44, Math.round(48 * controlScale));
+    this.controlPadding = Math.round(clamp(shortSide * 0.05, 16, 28));
+    this.bottomPadding = Math.round(clamp(screenHeight * 0.035, 20, 34));
   }
 
   getInput(): TouchInput {
-    if (!this.joystickActive && !this.brakeActive && !this.handbrakeActive) {
-      return { throttle: 0, brake: 0, steer: 0, handbrake: 0 };
-    }
-
-    // Joystick Y axis: up = throttle, down = brake (additional to button)
-    const throttle = clamp(-this.joystickOffset.y, 0, 1);
-    const joystickBrake = clamp(this.joystickOffset.y, 0, 1);
-
-    // Joystick X axis: steering
-    const steer = clamp(this.joystickOffset.x, -1, 1);
+    const steer = this.applyDeadzone(this.joystickOffset.x, 0.12);
+    const driveAxis = this.applyDeadzone(this.joystickOffset.y, 0.08);
 
     return {
-      throttle,
-      brake: Math.max(joystickBrake, this.brakeActive ? 1 : 0),
+      throttle: clamp(-driveAxis, 0, 1),
+      brake: Math.max(clamp(driveAxis, 0, 1), this.brakeTouchId !== null ? 1 : 0),
       steer,
-      handbrake: this.handbrakeActive ? 1 : 0,
+      handbrake: this.handbrakeTouchId !== null ? 1 : 0,
     };
   }
 
-  /** Show or hide the action buttons (BACK / GO). */
   showActionButtons(show: boolean): void {
-    this.backButton.visible = show && this.isTouchDevice;
-    this.enterButton.visible = show && this.isTouchDevice;
+    this.setActionButtonVisibility(show, show);
+  }
+
+  setActionButtonVisibility(backVisible: boolean, enterVisible: boolean): void {
+    this.backButtonVisible = backVisible;
+    this.enterButtonVisible = enterVisible;
+    this.backButton.container.visible = backVisible && this.isTouchDevice;
+    this.enterButton.container.visible = enterVisible && this.isTouchDevice;
   }
 
   setPosition(screenWidth: number, screenHeight: number): void {
-    // Joystick on left side, near bottom
-    this.joystickContainer.position.set(
-      this.joystickRadius + 30,
-      screenHeight - this.joystickRadius - 80
-    );
+    this.screenWidth = screenWidth;
+    this.screenHeight = screenHeight;
+    this.updateMetrics(screenWidth, screenHeight);
 
-    // Buttons on right side, stacked vertically
-    this.brakeButton.position.set(
-      screenWidth - this.buttonRadius - 30,
-      screenHeight - this.buttonRadius - 80
-    );
+    this.redrawJoystick();
+    this.redrawControlButton(this.brakeButton, this.neonRed, this.brakeTouchId !== null);
+    this.redrawControlButton(this.handbrakeButton, this.neonMagenta, this.handbrakeTouchId !== null);
+    this.redrawActionButton(this.backButton, this.neonRed);
+    this.redrawActionButton(this.enterButton, this.neonGreen);
 
-    this.handbrakeButton.position.set(
-      screenWidth - this.buttonRadius - 30,
-      screenHeight - this.buttonRadius * 3 - 100
-    );
+    const isMobile = screenWidth < 768;
+    const controlColumnGap = Math.round(this.buttonRadius * 2.25);
 
-    // Action buttons: top corners
-    this.backButton.position.set(50, 30);
-    this.enterButton.position.set(screenWidth - 50, 30);
+    this.joystickCenter = {
+      x: this.controlPadding + this.joystickBaseRadius,
+      y: screenHeight - this.bottomPadding - this.joystickBaseRadius,
+    };
+    this.joystickContainer.position.set(this.joystickCenter.x, this.joystickCenter.y);
+
+    const brakeX = screenWidth - this.controlPadding - this.buttonRadius;
+    const brakeY = screenHeight - this.bottomPadding - this.buttonRadius;
+    this.brakeButton.container.position.set(brakeX, brakeY);
+    this.handbrakeButton.container.position.set(brakeX, brakeY - controlColumnGap);
+
+    if (isMobile) {
+      this.backButton.container.position.set(
+        this.joystickCenter.x,
+        this.joystickCenter.y - this.joystickBaseRadius - this.actionButtonHeight * 0.6
+      );
+      this.enterButton.container.position.set(
+        brakeX,
+        brakeY - controlColumnGap - this.buttonRadius - this.actionButtonHeight * 0.75
+      );
+    } else {
+      const topY = this.controlPadding + this.actionButtonHeight / 2;
+      this.backButton.container.position.set(this.controlPadding + this.actionButtonWidth / 2, topY);
+      this.enterButton.container.position.set(screenWidth - this.controlPadding - this.actionButtonWidth / 2, topY);
+    }
+
+    this.backButton.container.visible = this.backButtonVisible && this.isTouchDevice;
+    this.enterButton.container.visible = this.enterButtonVisible && this.isTouchDevice;
   }
 
   get visible(): boolean {
