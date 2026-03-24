@@ -41,6 +41,7 @@ export class TouchControls {
   private joystickKnob: Graphics;
   private joystickHint: Text;
 
+  private gasButton: ControlButtonRefs;
   private brakeButton: ControlButtonRefs;
   private handbrakeButton: ControlButtonRefs;
 
@@ -65,6 +66,7 @@ export class TouchControls {
 
   private joystickTouchId: number | null = null;
   private joystickOffset = { x: 0, y: 0 };
+  private gasTouchId: number | null = null;
   private brakeTouchId: number | null = null;
   private handbrakeTouchId: number | null = null;
 
@@ -84,7 +86,7 @@ export class TouchControls {
     this.joystickBase = new Graphics();
     this.joystickKnob = new Graphics();
     this.joystickHint = new Text({
-      text: 'STEER / GAS',
+      text: 'STEER',
       style: new TextStyle({
         fontFamily: 'monospace',
         fontSize: 14,
@@ -94,6 +96,7 @@ export class TouchControls {
     });
     this.joystickHint.anchor.set(0.5, 0.5);
 
+    this.gasButton = this.createControlButton('GAS', this.neonGreen);
     this.brakeButton = this.createControlButton('BRAKE', this.neonRed);
     this.handbrakeButton = this.createControlButton('DRIFT', this.neonMagenta);
 
@@ -103,6 +106,7 @@ export class TouchControls {
     this.joystickContainer.addChild(this.joystickBase, this.joystickKnob, this.joystickHint);
     this.container.addChild(
       this.joystickContainer,
+      this.gasButton.container,
       this.brakeButton.container,
       this.handbrakeButton.container,
       this.backButton.container,
@@ -110,6 +114,7 @@ export class TouchControls {
     );
 
     this.redrawJoystick();
+    this.redrawControlButton(this.gasButton, this.neonGreen, false);
     this.redrawControlButton(this.brakeButton, this.neonRed, false);
     this.redrawControlButton(this.handbrakeButton, this.neonMagenta, false);
     this.redrawActionButton(this.backButton, this.neonRed);
@@ -269,6 +274,10 @@ export class TouchControls {
     this.joystickBase.cursor = 'pointer';
     this.joystickBase.on('pointerdown', this.onJoystickDown);
 
+    this.gasButton.container.eventMode = 'static';
+    this.gasButton.container.cursor = 'pointer';
+    this.gasButton.container.on('pointerdown', this.onGasDown);
+
     this.brakeButton.container.eventMode = 'static';
     this.brakeButton.container.cursor = 'pointer';
     this.brakeButton.container.on('pointerdown', this.onBrakeDown);
@@ -289,6 +298,16 @@ export class TouchControls {
 
     this.joystickTouchId = event.pointerId;
     this.updateJoystickFromScreenPoint(event.global.x, event.global.y);
+    event.stopPropagation();
+  };
+
+  private onGasDown = (event: FederatedPointerEvent): void => {
+    if (this.gasTouchId !== null && this.gasTouchId !== event.pointerId) {
+      return;
+    }
+
+    this.gasTouchId = event.pointerId;
+    this.redrawControlButton(this.gasButton, this.neonGreen, true);
     event.stopPropagation();
   };
 
@@ -324,6 +343,11 @@ export class TouchControls {
   private onGlobalPointerEnd = (event: PointerEvent): void => {
     if (event.pointerId === this.joystickTouchId) {
       this.resetJoystick();
+    }
+
+    if (event.pointerId === this.gasTouchId) {
+      this.gasTouchId = null;
+      this.redrawControlButton(this.gasButton, this.neonGreen, false);
     }
 
     if (event.pointerId === this.brakeTouchId) {
@@ -391,11 +415,10 @@ export class TouchControls {
 
   getInput(): TouchInput {
     const steer = this.applyDeadzone(this.joystickOffset.x, 0.12);
-    const driveAxis = this.applyDeadzone(this.joystickOffset.y, 0.08);
 
     return {
-      throttle: clamp(-driveAxis, 0, 1),
-      brake: Math.max(clamp(driveAxis, 0, 1), this.brakeTouchId !== null ? 1 : 0),
+      throttle: this.gasTouchId !== null ? 1 : 0,
+      brake: this.brakeTouchId !== null ? 1 : 0,
       steer,
       handbrake: this.handbrakeTouchId !== null ? 1 : 0,
     };
@@ -418,6 +441,7 @@ export class TouchControls {
     this.updateMetrics(screenWidth, screenHeight);
 
     this.redrawJoystick();
+    this.redrawControlButton(this.gasButton, this.neonGreen, this.gasTouchId !== null);
     this.redrawControlButton(this.brakeButton, this.neonRed, this.brakeTouchId !== null);
     this.redrawControlButton(this.handbrakeButton, this.neonMagenta, this.handbrakeTouchId !== null);
     this.redrawActionButton(this.backButton, this.neonRed);
@@ -432,19 +456,25 @@ export class TouchControls {
     };
     this.joystickContainer.position.set(this.joystickCenter.x, this.joystickCenter.y);
 
-    const brakeX = screenWidth - this.controlPadding - this.buttonRadius;
-    const brakeY = screenHeight - this.bottomPadding - this.buttonRadius;
+    // Right side: GAS (big, bottom), BRAKE (above), DRIFT (top)
+    const gasX = screenWidth - this.controlPadding - this.buttonRadius;
+    const gasY = screenHeight - this.bottomPadding - this.buttonRadius;
+    this.gasButton.container.position.set(gasX, gasY);
+
+    const brakeX = gasX - controlColumnGap; // left of gas
+    const brakeY = gasY;
     this.brakeButton.container.position.set(brakeX, brakeY);
-    this.handbrakeButton.container.position.set(brakeX, brakeY - controlColumnGap);
+
+    this.handbrakeButton.container.position.set(gasX, gasY - controlColumnGap);
 
     if (isMobile) {
       this.backButton.container.position.set(
         this.joystickCenter.x,
-        this.joystickCenter.y - this.joystickBaseRadius - this.actionButtonHeight * 0.6
+        this.joystickCenter.y - this.joystickBaseRadius - this.actionButtonHeight * 0.8
       );
       this.enterButton.container.position.set(
-        brakeX,
-        brakeY - controlColumnGap - this.buttonRadius - this.actionButtonHeight * 0.75
+        gasX,
+        gasY - controlColumnGap * 2 - this.actionButtonHeight * 0.2
       );
     } else {
       const topY = this.controlPadding + this.actionButtonHeight / 2;

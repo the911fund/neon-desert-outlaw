@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="12" fill="#0f0b14"/>
+  <text x="32" y="26" text-anchor="middle" font-family="monospace" font-weight="bold" font-size="18" fill="#00ffff">TURBO</text>
+  <text x="32" y="48" text-anchor="middle" font-family="monospace" font-weight="bold" font-size="14" fill="#ff00ff">911</text>
+  <rect x="4" y="4" width="56" height="56" rx="10" fill="none" stroke="#00ffff" stroke-width="2" opacity="0.5"/>
+</svg>

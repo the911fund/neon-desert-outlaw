@@ -27,19 +27,34 @@ export class CheckpointManager {
   }
 
   generateCircuit(): void {
-    const waypoints: [number, number][] = [
-      [400, 0],       // 1: right on road
-      [1000, -60],    // 2: further right on road
-      [1800, -120],   // 3: far right curve
-      [2200, -400],   // 4: off-road into desert (north)
-      [1800, -800],   // 5: deep desert
-      [1000, -900],   // 6: far north
-      [200, -700],    // 7: heading back west
-      [-400, -400],   // 8: southwest of start
-      [-600, 0],      // 9: west on road
-      [-200, 200],    // 10: loop back to start area
-    ];
-    this.generateFromPositions(waypoints, true);
+    // Generate truly random checkpoint positions spread across the map
+    const count = 10;
+    const minDistance = 400; // minimum distance between checkpoints
+    const mapRadius = 2400; // how far from origin checkpoints can spawn
+    const waypoints: [number, number][] = [];
+
+    for (let i = 0; i < count; i++) {
+      let attempts = 0;
+      let x: number, y: number;
+      do {
+        // Random angle and distance from origin for good spread
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 300 + Math.random() * (mapRadius - 300);
+        x = Math.cos(angle) * dist;
+        y = Math.sin(angle) * dist;
+        attempts++;
+        // Check minimum distance from all existing waypoints
+        const tooClose = waypoints.some(([wx, wy]) => {
+          const dx = x - wx;
+          const dy = y - wy;
+          return Math.sqrt(dx * dx + dy * dy) < minDistance;
+        });
+        if (!tooClose) break;
+      } while (attempts < 50);
+      waypoints.push([Math.round(x), Math.round(y)]);
+    }
+
+    this.generateFromPositions(waypoints, false); // already randomized positions
   }
 
   generateFromPositions(waypoints: [number, number][], shuffle = false): void {
