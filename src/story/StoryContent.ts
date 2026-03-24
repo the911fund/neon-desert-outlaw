@@ -8,7 +8,7 @@ export const STORY_MISSIONS: Mission[] = [
     chapter: 1,
     chapterTitle: 'The Newcomer',
     briefing: [
-      { speaker: 'DISPATCH', text: 'Welcome to the Neon Desert. Lets see what youve got.' },
+      { speaker: 'DISPATCH', text: 'Welcome to the Turbo Desert. Lets see what youve got.' },
       { speaker: 'DISPATCH', text: 'Hit the checkpoints. Nice and easy.' },
     ],
     objectives: { type: 'reach_checkpoints' },
@@ -152,7 +152,7 @@ export const STORY_MISSIONS: Mission[] = [
       [-300, -300],
     ],
     completionDialogue: [
-      { speaker: 'DISPATCH', text: 'They know your name now. The Neon Desert Outlaw.' },
+      { speaker: 'DISPATCH', text: 'They know your name now. The Turbo 911 Outlaw.' },
     ],
   },
   {
@@ -180,7 +180,7 @@ export const STORY_MISSIONS: Mission[] = [
       [-300, 100],
     ],
     completionDialogue: [
-      { speaker: 'DISPATCH', text: 'Its done. You are the Neon Desert Outlaw.' },
+      { speaker: 'DISPATCH', text: 'Its done. You are the Turbo 911 Outlaw.' },
       { speaker: 'DISPATCH', text: 'The desert is yours. Ride free.' },
     ],
   },

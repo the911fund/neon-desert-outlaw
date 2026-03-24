@@ -759,7 +759,7 @@ export class HUD {
 
     switch (state.raceState) {
       case RaceState.TITLE:
-        this.overlayTitle.text = 'NEON DESERT OUTLAW';
+        this.overlayTitle.text = 'TURBO 911';
         this.overlayTitle.position.set(0, -40);
         this.overlaySubtitle.text = 'Press ENTER or tap ▶ GO';
         this.overlaySubtitle.position.set(0, 30);
@@ -897,7 +897,7 @@ export class HUD {
   showFinale(visible: boolean): void {
     this.storyOverlayContainer.visible = visible;
     if (visible) {
-      this.storyOverlayTitle.text = 'YOU ARE THE\nNEON DESERT OUTLAW';
+      this.storyOverlayTitle.text = 'YOU ARE THE\nTURBO 911 OUTLAW';
       this.storyOverlaySubtitle.text = 'Press ESC to return to menu';
     }
   }
@@ -955,11 +955,20 @@ export class HUD {
     this.speedContainer.scale.set(scale);
     this.rpmContainer.scale.set(scale);
     this.surfaceContainer.scale.set(scale);
-    this.speedContainer.position.set(padding, padding);
-    this.rpmContainer.position.set(padding, padding + speedHeight + panelGap);
-    this.surfaceContainer.position.set(padding, padding + speedHeight + rpmHeight + panelGap * 2);
 
-    const driftY = screenHeight - (isMobile ? Math.max(170, screenHeight * 0.28) : 100);
+    // On mobile: move speed/RPM/surface to bottom-left to avoid overlapping with timer at top
+    if (isMobile) {
+      const bottomBase = screenHeight - padding - 220 * scale;
+      this.speedContainer.position.set(padding, bottomBase);
+      this.rpmContainer.position.set(padding, bottomBase + speedHeight + panelGap);
+      this.surfaceContainer.position.set(padding, bottomBase + speedHeight + rpmHeight + panelGap * 2);
+    } else {
+      this.speedContainer.position.set(padding, padding);
+      this.rpmContainer.position.set(padding, padding + speedHeight + panelGap);
+      this.surfaceContainer.position.set(padding, padding + speedHeight + rpmHeight + panelGap * 2);
+    }
+
+    const driftY = screenHeight - (isMobile ? Math.max(200, screenHeight * 0.32) : 100);
     this.driftContainer.position.set(screenWidth / 2, driftY);
     this.driftContainer.scale.set(scale);
 
@@ -987,13 +996,13 @@ export class HUD {
     this.soundHintText.position.set(screenWidth / 2, screenHeight - (isMobile ? 140 : 28));
     this.soundHintText.scale.set(scale);
 
-    const positionY = isMobile ? miniMapBottom + 12 : padding;
+    const positionY = isMobile ? miniMapBottom + 18 : padding;
     this.positionContainer.position.set(screenWidth - padding - 90 * scale, positionY);
     this.positionContainer.scale.set(scale);
 
     this.standingsContainer.position.set(
       screenWidth - padding - 140 * scale,
-      positionY + 70 * scale
+      positionY + 68 * scale
     );
     this.standingsContainer.scale.set(scale);
 

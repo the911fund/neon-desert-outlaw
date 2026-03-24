@@ -72,7 +72,7 @@ export class MainMenu {
     this.container.addChild(this.particleGraphics);
 
     this.titleText = new Text({
-      text: 'NEON DESERT OUTLAW',
+      text: 'TURBO 911',
       style: new TextStyle({
         fontFamily: 'monospace',
         fontSize: 64,
@@ -394,7 +394,7 @@ export class MainMenu {
       : Math.round(this.clamp(width * 0.065, 48, 64));
     const subtitleSize = isPhone ? 16 : Math.round(this.clamp(width * 0.022, 18, 20));
 
-    this.titleText.text = isPhone ? 'NEON DESERT\nOUTLAW' : 'NEON DESERT OUTLAW';
+    this.titleText.text = isPhone ? 'TURBO 911' : 'TURBO 911';
     this.titleText.style.fontSize = titleSize;
     this.subtitleText.style.fontSize = subtitleSize;
 
