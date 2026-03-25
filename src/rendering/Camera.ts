@@ -12,12 +12,12 @@ export interface CameraConfig {
 }
 
 const DEFAULT_CONFIG: CameraConfig = {
-  lookAheadMaxDistance: 150,
-  lookAheadSpeedThreshold: 250,
+  lookAheadMaxDistance: 220,
+  lookAheadSpeedThreshold: 200,
   smoothingFactor: 0.05,
-  minZoom: 0.85,
-  maxZoom: 1.0,
-  zoomSpeedThreshold: 300,
+  minZoom: 0.55,
+  maxZoom: 0.75,
+  zoomSpeedThreshold: 250,
 };
 
 export class Camera {

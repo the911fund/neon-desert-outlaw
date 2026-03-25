@@ -947,7 +947,7 @@ export class HUD {
     const padding = isMobile ? 14 : 20;
     const panelGap = Math.round(10 * scale);
     const miniMapScale = isMobile ? Math.max(0.68, Math.min(0.92, Math.min(screenWidth / 430, screenHeight / 920))) : 1;
-    const miniMapBottom = padding + 150 * miniMapScale;
+    const miniMapBottom = padding + 200 * miniMapScale;
     const speedHeight = 80 * scale;
     const rpmHeight = 46 * scale;
     const overlayWrapWidth = (screenWidth * 0.82) / overlayScale;

@@ -148,7 +148,8 @@ export class MusicControls {
       this.height = 88;
       this.buttonHeight = 30;
       this.layout();
-      this.container.position.set(screenWidth - this.width - 12, 12);
+      // Position below the minimap (200px size + padding) to avoid overlap
+      this.container.position.set(screenWidth - this.width - 12, 228);
     }
 
     if (this.compactMode && this.container.y + this.height > screenHeight - 220) {

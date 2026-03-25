@@ -34,8 +34,8 @@ export class MiniMap {
   private mask: Graphics;
   private border: Graphics;
 
-  private readonly size = 150;
-  private readonly scale = 0.05; // World units to minimap pixels
+  private readonly size = 200;
+  private readonly scale = 0.04; // World units to minimap pixels (wider coverage)
   private readonly neonCyan = 0x00ffff;
   private readonly neonMagenta = 0xff00ff;
   private readonly bgColor = 0x0a0a0a;
@@ -251,14 +251,15 @@ export class MiniMap {
   }
 
   setPosition(screenWidth: number, screenHeight: number): void {
+    const isMobile = screenWidth < 768;
     const compactScale = Math.min(screenWidth / 430, screenHeight / 920);
-    const scale = screenWidth < 768
-      ? Math.max(0.68, Math.min(0.92, compactScale))
+    const scale = isMobile
+      ? Math.max(0.72, Math.min(0.95, compactScale))
       : 1;
     this.container.scale.set(scale);
 
     const effectiveSize = this.size * scale;
-    const padding = screenWidth < 768 ? 14 : 16;
+    const padding = isMobile ? 14 : 16;
     this.container.position.set(screenWidth - effectiveSize - padding, padding);
   }
 }
