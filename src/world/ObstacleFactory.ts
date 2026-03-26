@@ -96,14 +96,64 @@ export class ObstacleFactory {
   renderObstacles(graphics: Graphics, obstacles: ObstacleInstance[]): void {
     graphics.clear();
 
+    // First pass: draw drop shadows beneath all obstacles
+    for (const obstacle of obstacles) {
+      const x = obstacle.localX;
+      const y = obstacle.localY;
+      const shadowOffsetX = 3;
+      const shadowOffsetY = 4;
+
+      switch (obstacle.type) {
+        case 'rock': {
+          graphics.beginFill(0x000000, 0.25);
+          graphics.drawEllipse(x + shadowOffsetX, y + shadowOffsetY, obstacle.width * 0.55, obstacle.width * 0.35);
+          graphics.endFill();
+          break;
+        }
+        case 'deadTree': {
+          graphics.beginFill(0x000000, 0.2);
+          graphics.drawEllipse(x + shadowOffsetX, y + shadowOffsetY, obstacle.width + 4, obstacle.height * 0.18);
+          graphics.endFill();
+          break;
+        }
+        case 'cactus': {
+          graphics.beginFill(0x000000, 0.22);
+          graphics.drawEllipse(x + shadowOffsetX, y + obstacle.height * 0.3 + shadowOffsetY, obstacle.width * 0.7, obstacle.height * 0.2);
+          graphics.endFill();
+          break;
+        }
+        case 'wreck': {
+          graphics.beginFill(0x000000, 0.25);
+          graphics.drawEllipse(x + shadowOffsetX, y + shadowOffsetY, obstacle.width * 0.55, obstacle.height * 0.35);
+          graphics.endFill();
+          break;
+        }
+        case 'outpostFuel':
+        case 'outpostRest': {
+          graphics.beginFill(0x000000, 0.2);
+          graphics.drawEllipse(x + shadowOffsetX * 2, y + obstacle.height * 0.3 + shadowOffsetY, obstacle.width * 0.5, obstacle.height * 0.25);
+          graphics.endFill();
+          break;
+        }
+        default:
+          break;
+      }
+    }
+
+    // Second pass: draw obstacle sprites on top of shadows
     for (const obstacle of obstacles) {
       const x = obstacle.localX;
       const y = obstacle.localY;
 
       switch (obstacle.type) {
         case 'rock': {
+          // Main rock shape
           graphics.beginFill(0x6b6b6b, 0.95);
           graphics.drawCircle(x, y, obstacle.width * 0.5);
+          graphics.endFill();
+          // Subtle highlight on top-left
+          graphics.beginFill(0x8a8a8a, 0.4);
+          graphics.drawCircle(x - obstacle.width * 0.12, y - obstacle.width * 0.12, obstacle.width * 0.25);
           graphics.endFill();
           break;
         }
@@ -119,12 +169,27 @@ export class ObstacleFactory {
           graphics.drawRoundedRect(x - obstacle.width * 0.5, y - obstacle.height * 0.5, obstacle.width, obstacle.height, 3);
           graphics.drawRoundedRect(x - obstacle.width * 0.9, y - obstacle.height * 0.1, obstacle.width * 0.4, obstacle.height * 0.35, 2);
           graphics.endFill();
+          // Subtle highlight stripe on main trunk
+          graphics.beginFill(0x3dd95a, 0.3);
+          graphics.drawRoundedRect(x - obstacle.width * 0.15, y - obstacle.height * 0.45, obstacle.width * 0.15, obstacle.height * 0.9, 1);
+          graphics.endFill();
           break;
         }
         case 'wreck': {
+          // Warning stripe effect on wrecks
           graphics.beginFill(0xb33b3b, 0.9);
           graphics.drawRect(x - obstacle.width * 0.5, y - obstacle.height * 0.5, obstacle.width, obstacle.height);
           graphics.endFill();
+          // Diagonal warning stripes
+          graphics.lineStyle(2, 0xe8c840, 0.5);
+          const stripeSpacing = 8;
+          for (let s = -obstacle.width; s < obstacle.width; s += stripeSpacing) {
+            const sx1 = Math.max(x - obstacle.width * 0.5, x - obstacle.width * 0.5 + s);
+            const sx2 = Math.min(x + obstacle.width * 0.5, x - obstacle.width * 0.5 + s + obstacle.height);
+            graphics.moveTo(sx1, y - obstacle.height * 0.5);
+            graphics.lineTo(sx2, y + obstacle.height * 0.5);
+          }
+          graphics.lineStyle(0);
           break;
         }
         case 'outpostFuel': {

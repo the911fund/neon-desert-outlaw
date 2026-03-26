@@ -11,6 +11,7 @@ import { Camera } from '../rendering/Camera';
 import { LightingSystem } from '../rendering/LightingSystem';
 import { ParticleSystem } from '../rendering/ParticleSystem';
 import { BloomFilter } from '../rendering/BloomFilter';
+import { VignetteOverlay } from '../rendering/VignetteOverlay';
 import { HUD } from '../ui/HUD';
 import { MiniMap } from '../ui/MiniMap';
 import type { MiniMapObstacle } from '../ui/MiniMap';
@@ -52,6 +53,7 @@ export class Game {
   private accumulator = 0;
 
   private camera: Camera;
+  private vignette: VignetteOverlay;
   private hud: HUD;
   private miniMap: MiniMap;
   private touchControls: TouchControls;
@@ -168,6 +170,10 @@ export class Game {
     this.lighting.addLight(this.headlights.container);
     this.bloom.applyTo(this.headlights.container, 0.8, 2);
     this.app.stage.addChild(this.lighting.container);
+
+    // Cinematic vignette overlay (between lighting and UI)
+    this.vignette = new VignetteOverlay();
+    this.app.stage.addChild(this.vignette.container);
 
     this.particles = new ParticleSystem(this.particleLayer, {
       bloom: this.bloom,
@@ -370,6 +376,7 @@ export class Game {
   private setVisible(visible: boolean): void {
     this.world.visible = visible;
     this.lighting.container.visible = visible;
+    this.vignette.container.visible = visible;
     this.uiContainer.visible = visible;
   }
 
@@ -398,6 +405,7 @@ export class Game {
     this.app.renderer.resize(viewport.width, viewport.height);
     this.camera.setScreenSize(viewport.width, viewport.height);
     this.lighting.resize(this.app.renderer.width, this.app.renderer.height);
+    this.vignette.resize(viewport.width, viewport.height);
 
     // Reposition UI elements
     this.hud.setPosition(viewport.width, viewport.height);

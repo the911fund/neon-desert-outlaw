@@ -22,10 +22,10 @@ describe('ParticleSystem', () => {
       surface: SurfaceType.Sand,
     });
 
-    expect(system.getActiveCountByKind('track')).toBe(20);
+    expect(system.getActiveCountByKind('track')).toBe(48); // 20 drift tracks + 28 skid marks
     expect(system.getActiveCountByKind('dust')).toBe(27);
     expect(system.getActiveCountByKind('smoke')).toBeGreaterThan(0);
-    expect(system.getActiveCount()).toBe(61);
+    expect(system.getActiveCount()).toBe(89);
   });
 
   it('recycles particles after lifetime expiry', () => {
