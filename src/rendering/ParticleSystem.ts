@@ -57,11 +57,13 @@ export class ParticleSystem {
   private dustAccumulator = 0;
   private sprayAccumulator = 0;
   private smokeAccumulator = 0;
+  private skidAccumulator = 0;
 
   private readonly trackRate = 10;
   private readonly sandDustRate = 18;
   private readonly roadSprayRate = 6;
   private readonly smokeRate = 14;
+  private readonly skidRate = 14;
 
   private readonly trackColors = [0x00ffff, 0xff00ff, 0xff1493];
 
@@ -174,6 +176,18 @@ export class ParticleSystem {
     } else {
       this.dustAccumulator = 0;
       this.sprayAccumulator = 0;
+    }
+
+    // Skid marks on hard turns (visible on both sand and road)
+    if (context.driftRatio > 0.5 && speedRatio > 0.2) {
+      const skidIntensity = clamp((context.driftRatio - 0.5) / 0.5, 0, 1);
+      this.skidAccumulator += dt * this.skidRate * skidIntensity * speedRatio;
+      while (this.skidAccumulator >= 1) {
+        this.emitSkidMarks(context.position, context.heading, skidIntensity, context.surface);
+        this.skidAccumulator -= 1;
+      }
+    } else {
+      this.skidAccumulator = 0;
     }
 
     // Tire smoke during drift
@@ -312,6 +326,38 @@ export class ParticleSystem {
         radius,
         gravity: -5,
         color: 0xcccccc,
+      });
+    }
+  }
+
+  private emitSkidMarks(position: Vector2, heading: number, intensity: number, surface: SurfaceType): void {
+    const offset = 10;
+    const sideX = Math.cos(heading + Math.PI / 2);
+    const sideY = Math.sin(heading + Math.PI / 2);
+    const leftX = position.x - sideX * offset;
+    const leftY = position.y - sideY * offset;
+    const rightX = position.x + sideX * offset;
+    const rightY = position.y + sideY * offset;
+
+    const width = lerp(2, 5, intensity);
+    const length = lerp(12, 20, intensity);
+    // Dark rubber marks on road, lighter sand-colored marks on sand
+    const color = surface === SurfaceType.Road ? 0x1a1a1a : 0x8a7650;
+    const alpha = surface === SurfaceType.Road ? 0.6 : 0.4;
+
+    for (const pos of [new Vector2(leftX, leftY), new Vector2(rightX, rightY)]) {
+      this.spawnParticle({
+        kind: 'track',
+        position: pos,
+        velocity: Vector2.zero(),
+        rotation: heading,
+        lifetime: lerp(3, 7, this.random()),
+        baseAlpha: alpha * intensity,
+        width,
+        length,
+        radius: 0,
+        gravity: 0,
+        color,
       });
     }
   }

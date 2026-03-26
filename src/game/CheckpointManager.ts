@@ -129,8 +129,18 @@ export class CheckpointManager {
     const radius = this.gateRadius;
     const flagHeight = radius + 28;
 
+    // Beacon glow — large soft circle visible from a distance
+    if (isNext) {
+      gfx.beginFill(color, 0.04 * pulse);
+      gfx.drawCircle(0, 0, radius * 3.5);
+      gfx.endFill();
+      gfx.beginFill(color, 0.07 * pulse);
+      gfx.drawCircle(0, 0, radius * 2.2);
+      gfx.endFill();
+    }
+
     // Outer ring (glow)
-    gfx.beginFill(color, 0.1 * pulse);
+    gfx.beginFill(color, 0.12 * pulse);
     gfx.drawCircle(0, 0, radius + 12);
     gfx.endFill();
 
@@ -146,6 +156,19 @@ export class CheckpointManager {
     gfx.beginFill(color, 0.6 * pulse);
     gfx.drawCircle(0, 0, 4);
     gfx.endFill();
+
+    // Vertical beacon beam for the next checkpoint
+    if (isNext) {
+      const beamHeight = 120;
+      const beamWidth = 6;
+      gfx.beginFill(color, 0.25 * pulse);
+      gfx.drawRect(-beamWidth * 0.5, -flagHeight - beamHeight, beamWidth, beamHeight);
+      gfx.endFill();
+      // Wider soft beam behind
+      gfx.beginFill(color, 0.08 * pulse);
+      gfx.drawRect(-beamWidth * 1.5, -flagHeight - beamHeight * 0.8, beamWidth * 3, beamHeight * 0.8);
+      gfx.endFill();
+    }
 
     // Pole marker to make checkpoints readable at distance.
     gfx.lineStyle(3, color, 0.9);

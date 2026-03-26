@@ -26,6 +26,7 @@ export class VehicleRenderer {
   private rearRightWheel: Graphics;
   private brakeLights: Graphics;
   private underglow: Graphics;
+  private groundShadow: Graphics;
   private accentStripes: Graphics;
   private scratchOverlay: Graphics;
 
@@ -53,6 +54,7 @@ export class VehicleRenderer {
     this.container = new Container();
 
     // Create layers from bottom to top
+    this.groundShadow = new Graphics();
     this.underglow = new Graphics();
     this.body = new Graphics();
     this.roof = new Graphics();
@@ -68,6 +70,7 @@ export class VehicleRenderer {
     this.rearRightWheel = new Graphics();
 
     // Add to container in order
+    this.container.addChild(this.groundShadow);
     this.container.addChild(this.underglow);
     this.container.addChild(this.rearLeftWheel);
     this.container.addChild(this.rearRightWheel);
@@ -85,11 +88,26 @@ export class VehicleRenderer {
   }
 
   private drawStaticElements(): void {
+    this.drawGroundShadow();
     this.drawBody();
     this.drawRoof();
     this.drawSpoiler();
     this.drawAccentStripes();
     this.drawWheels();
+  }
+
+  private drawGroundShadow(): void {
+    this.groundShadow.clear();
+    const halfLength = this.length / 2;
+    const halfWidth = this.width / 2;
+    // Soft shadow offset slightly behind and below the car
+    this.groundShadow.beginFill(0x000000, 0.3);
+    this.groundShadow.drawEllipse(2, 3, halfLength + 3, halfWidth + 2);
+    this.groundShadow.endFill();
+    // Softer outer penumbra
+    this.groundShadow.beginFill(0x000000, 0.12);
+    this.groundShadow.drawEllipse(3, 5, halfLength + 8, halfWidth + 6);
+    this.groundShadow.endFill();
   }
 
   private drawBody(): void {
