@@ -141,6 +141,18 @@ export class Game {
         this.audio.nextTrack();
         this.syncMusicControls();
       },
+      () => {
+        this.audio.toggleSfxMute();
+        this.syncMusicControls();
+      },
+      (v: number) => {
+        this.audio.setSfxVolume(v);
+        this.syncMusicControls();
+      },
+      (v: number) => {
+        this.audio.setMusicVolume(v);
+        this.syncMusicControls();
+      },
     );
 
     this.bloom = new BloomFilter();
@@ -193,7 +205,10 @@ export class Game {
 
     // Initialize audio system
     this.audio = new AudioManager();
-    this.input.setMuteToggleHandler(() => this.audio.toggleMute());
+    this.input.setMuteToggleHandler(() => {
+      this.audio.toggleSfxMute();
+      this.syncMusicControls();
+    });
 
     // Start audio on first user interaction (browser autoplay policy)
     const startAudio = (): void => {
@@ -419,6 +434,9 @@ export class Game {
     this.musicControls.setState({
       trackName: this.audio.musicTrackName,
       isPlaying: this.audio.musicPlaying,
+      sfxMuted: this.audio.sfxMuted,
+      sfxVolume: this.audio.sfxVolume,
+      musicVolume: this.audio.musicVolume,
     });
   }
 

@@ -3,6 +3,9 @@ import { Container, Graphics, Text, TextStyle } from 'pixi.js';
 export interface MusicControlsState {
   trackName: string;
   isPlaying: boolean;
+  sfxMuted: boolean;
+  sfxVolume: number;
+  musicVolume: number;
 }
 
 interface ControlButton {
@@ -10,6 +13,18 @@ interface ControlButton {
   background: Graphics;
   label: Text;
   onTap: () => void;
+}
+
+interface VolumeSlider {
+  container: Container;
+  track: Graphics;
+  fill: Graphics;
+  handle: Graphics;
+  labelText: Text;
+  valueText: Text;
+  value: number;
+  onChange: (v: number) => void;
+  width: number;
 }
 
 export class MusicControls {
@@ -20,16 +35,26 @@ export class MusicControls {
   private trackText: Text;
   private playPauseText: Text;
   private readonly buttons: ControlButton[] = [];
+  private sfxMuteButton: ControlButton;
+  private sfxSlider: VolumeSlider;
+  private musicSlider: VolumeSlider;
   private width = 300;
-  private height = 88;
+  private height = 200;
   private buttonHeight = 30;
   private compactMode = false;
 
-  constructor(onPrev: () => void, onPlayPause: () => void, onNext: () => void) {
+  constructor(
+    onPrev: () => void,
+    onPlayPause: () => void,
+    onNext: () => void,
+    onSfxMuteToggle: () => void,
+    onSfxVolumeChange: (v: number) => void,
+    onMusicVolumeChange: (v: number) => void,
+  ) {
     this.container = new Container();
     this.panel = new Graphics();
     this.titleText = new Text({
-      text: 'MUSIC',
+      text: 'AUDIO',
       style: new TextStyle({
         fontFamily: 'monospace',
         fontSize: 12,
@@ -66,6 +91,13 @@ export class MusicControls {
       this.buttons.push(this.createButton(def.label, def.onTap));
     }
 
+    // SFX mute toggle button
+    this.sfxMuteButton = this.createButton('SFX: ON', onSfxMuteToggle);
+
+    // Volume sliders
+    this.sfxSlider = this.createSlider('SFX', 0.3, onSfxVolumeChange);
+    this.musicSlider = this.createSlider('MUSIC', 0.5, onMusicVolumeChange);
+
     this.layout();
   }
 
@@ -91,6 +123,124 @@ export class MusicControls {
     this.container.addChild(container);
 
     return { container, background, label: text, onTap };
+  }
+
+  private createSlider(label: string, initialValue: number, onChange: (v: number) => void): VolumeSlider {
+    const container = new Container();
+    const track = new Graphics();
+    const fill = new Graphics();
+    const handle = new Graphics();
+    const labelText = new Text({
+      text: label,
+      style: new TextStyle({
+        fontFamily: 'monospace',
+        fontSize: 10,
+        fontWeight: 'bold',
+        fill: 0xaaaaaa,
+      }),
+    });
+    const valueText = new Text({
+      text: Math.round(initialValue * 100).toString(),
+      style: new TextStyle({
+        fontFamily: 'monospace',
+        fontSize: 10,
+        fill: 0x00ffff,
+      }),
+    });
+
+    container.addChild(track, fill, handle, labelText, valueText);
+    this.container.addChild(container);
+
+    // Make track interactive for dragging
+    track.eventMode = 'static';
+    track.cursor = 'pointer';
+    handle.eventMode = 'static';
+    handle.cursor = 'pointer';
+
+    const slider: VolumeSlider = {
+      container,
+      track,
+      fill,
+      handle,
+      labelText,
+      valueText,
+      value: initialValue,
+      onChange,
+      width: 160,
+    };
+
+    const updateFromPointer = (e: { getLocalPosition: (obj: Container) => { x: number } }): void => {
+      const local = e.getLocalPosition(container);
+      const labelWidth = 50;
+      const valueWidth = 30;
+      const sliderLeft = labelWidth;
+      const sliderWidth = slider.width - labelWidth - valueWidth;
+      const ratio = Math.max(0, Math.min(1, (local.x - sliderLeft) / sliderWidth));
+      slider.value = ratio;
+      slider.onChange(ratio);
+      this.drawSlider(slider);
+    };
+
+    let dragging = false;
+    track.on('pointerdown', (e) => {
+      dragging = true;
+      updateFromPointer(e);
+    });
+    handle.on('pointerdown', (e) => {
+      dragging = true;
+      updateFromPointer(e);
+    });
+
+    const onMove = (e: { getLocalPosition: (obj: Container) => { x: number } }): void => {
+      if (dragging) updateFromPointer(e);
+    };
+    const onUp = (): void => {
+      dragging = false;
+    };
+
+    track.on('pointermove', onMove);
+    track.on('pointerup', onUp);
+    track.on('pointerupoutside', onUp);
+    handle.on('pointermove', onMove);
+    handle.on('pointerup', onUp);
+    handle.on('pointerupoutside', onUp);
+
+    return slider;
+  }
+
+  private drawSlider(slider: VolumeSlider): void {
+    const labelWidth = 50;
+    const valueWidth = 30;
+    const sliderWidth = slider.width - labelWidth - valueWidth;
+    const barHeight = 8;
+    const barY = 4;
+
+    slider.labelText.position.set(0, 0);
+    slider.valueText.text = Math.round(slider.value * 100).toString();
+    slider.valueText.position.set(slider.width - valueWidth, 0);
+
+    // Track background
+    slider.track.clear();
+    slider.track.beginFill(0x222233, 0.9);
+    slider.track.drawRoundedRect(labelWidth, barY, sliderWidth, barHeight, 4);
+    slider.track.endFill();
+
+    // Filled portion
+    const fillWidth = sliderWidth * slider.value;
+    slider.fill.clear();
+    if (fillWidth > 0) {
+      slider.fill.beginFill(0x00ffff, 0.8);
+      slider.fill.drawRoundedRect(labelWidth, barY, fillWidth, barHeight, 4);
+      slider.fill.endFill();
+    }
+
+    // Handle
+    const handleX = labelWidth + fillWidth;
+    const handleSize = 12;
+    slider.handle.clear();
+    slider.handle.beginFill(0x00ffff, 1);
+    slider.handle.drawCircle(handleX, barY + barHeight / 2, handleSize / 2);
+    slider.handle.endFill();
   }
 
   private drawButton(button: ControlButton, x: number, y: number, width: number): void {
@@ -121,17 +271,37 @@ export class MusicControls {
 
     this.titleText.position.set(14, 8);
     this.trackText.position.set(14, 26);
-    this.playPauseText.position.set(14, this.compactMode ? 48 : 58);
+    this.playPauseText.position.set(14, this.compactMode ? 48 : 44);
 
+    // Track control buttons
     if (this.compactMode) {
-      this.drawButton(this.buttons[0], 14, 68, 48);
-      this.drawButton(this.buttons[1], 70, 68, 100);
-      this.drawButton(this.buttons[2], 178, 68, 48);
+      const btnY = 62;
+      this.drawButton(this.buttons[0], 14, btnY, 48);
+      this.drawButton(this.buttons[1], 70, btnY, 100);
+      this.drawButton(this.buttons[2], 178, btnY, 48);
     } else {
-      this.drawButton(this.buttons[0], 16, 52, 36);
-      this.drawButton(this.buttons[1], 60, 52, 112);
-      this.drawButton(this.buttons[2], 180, 52, 36);
+      const btnY = 58;
+      this.drawButton(this.buttons[0], 16, btnY, 36);
+      this.drawButton(this.buttons[1], 60, btnY, 112);
+      this.drawButton(this.buttons[2], 180, btnY, 36);
     }
+
+    // SFX mute button
+    const sfxBtnY = this.compactMode ? 112 : 94;
+    this.drawButton(this.sfxMuteButton, 16, sfxBtnY, this.compactMode ? 80 : 68);
+
+    // Volume sliders
+    const sliderWidth = this.width - 28;
+    this.sfxSlider.width = sliderWidth;
+    this.musicSlider.width = sliderWidth;
+
+    const sfxSliderY = this.compactMode ? 140 : 128;
+    const musicSliderY = sfxSliderY + 20;
+    this.sfxSlider.container.position.set(14, sfxSliderY);
+    this.musicSlider.container.position.set(14, musicSliderY);
+
+    this.drawSlider(this.sfxSlider);
+    this.drawSlider(this.musicSlider);
   }
 
   setPosition(screenWidth: number, screenHeight: number): void {
@@ -139,13 +309,13 @@ export class MusicControls {
 
     if (this.compactMode) {
       this.width = Math.min(240, screenWidth - 32);
-      this.height = 118;
+      this.height = 178;
       this.buttonHeight = 44;
       this.layout();
       this.container.position.set(14, Math.round(18 + 208 * Math.min(screenWidth / 430, 1)));
     } else {
       this.width = 300;
-      this.height = 88;
+      this.height = 168;
       this.buttonHeight = 30;
       this.layout();
       // Position below the minimap (200px size + padding) to avoid overlap
@@ -160,5 +330,10 @@ export class MusicControls {
   setState(state: MusicControlsState): void {
     this.trackText.text = `Track: ${state.trackName}`;
     this.playPauseText.text = state.isPlaying ? 'Playing' : 'Paused';
+    this.sfxMuteButton.label.text = state.sfxMuted ? 'SFX: OFF' : 'SFX: ON';
+    this.sfxSlider.value = state.sfxVolume;
+    this.musicSlider.value = state.musicVolume;
+    this.drawSlider(this.sfxSlider);
+    this.drawSlider(this.musicSlider);
   }
 }

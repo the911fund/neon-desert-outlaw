@@ -24,6 +24,8 @@ interface ProceduralMusicTrack extends MusicTrackInfo {
 export class AudioManager {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
+  private sfxGain: GainNode | null = null;
+  private musicGain: GainNode | null = null;
 
   // Engine sound
   private engineOsc: OscillatorNode | null = null;
@@ -76,16 +78,32 @@ export class AudioManager {
     },
   ];
 
-  private _muted = false;
-  private _volume = 0.5;
+  private _sfxMuted = false;
+  private _sfxVolume = 0.3;
+  private _musicVolume = 0.5;
+  private _masterVolume = 0.7;
   private started = false;
 
-  get muted(): boolean {
-    return this._muted;
+  get sfxMuted(): boolean {
+    return this._sfxMuted;
   }
 
+  get sfxVolume(): number {
+    return this._sfxVolume;
+  }
+
+  get musicVolume(): number {
+    return this._musicVolume;
+  }
+
+  /** @deprecated Use sfxMuted instead. */
+  get muted(): boolean {
+    return this._sfxMuted;
+  }
+
+  /** @deprecated Use sfxVolume or musicVolume instead. */
   get volume(): number {
-    return this._volume;
+    return this._masterVolume;
   }
 
   get musicPlaying(): boolean {
@@ -129,19 +147,48 @@ export class AudioManager {
     return this._musicPlaying;
   }
 
+  setSfxVolume(v: number): void {
+    this._sfxVolume = clamp(v, 0, 1);
+    this.applySfxVolume();
+  }
+
+  setMusicVolume(v: number): void {
+    this._musicVolume = clamp(v, 0, 1);
+    this.applyMusicVolume();
+  }
+
+  /** @deprecated Use setSfxVolume or setMusicVolume instead. */
   setVolume(v: number): void {
-    this._volume = clamp(v, 0, 1);
+    this._masterVolume = clamp(v, 0, 1);
     this.applyMasterVolume();
   }
 
+  toggleSfxMute(): boolean {
+    this._sfxMuted = !this._sfxMuted;
+    this.applySfxVolume();
+    return this._sfxMuted;
+  }
+
+  /** @deprecated Use toggleSfxMute instead. */
   toggleMute(): void {
-    this._muted = !this._muted;
-    this.applyMasterVolume();
+    this.toggleSfxMute();
   }
 
   private applyMasterVolume(): void {
     if (this.masterGain) {
-      this.masterGain.gain.value = this._muted ? 0 : this._volume;
+      this.masterGain.gain.value = this._masterVolume;
+    }
+  }
+
+  private applySfxVolume(): void {
+    if (this.sfxGain) {
+      this.sfxGain.gain.value = this._sfxMuted ? 0 : this._sfxVolume;
+    }
+  }
+
+  private applyMusicVolume(): void {
+    if (this.musicGain) {
+      this.musicGain.gain.value = this._musicVolume;
     }
   }
 
@@ -154,6 +201,16 @@ export class AudioManager {
     this.masterGain.connect(this.ctx.destination);
     this.applyMasterVolume();
 
+    // SFX sub-bus (engine, drift, surface)
+    this.sfxGain = this.ctx.createGain();
+    this.sfxGain.connect(this.masterGain);
+    this.applySfxVolume();
+
+    // Music sub-bus
+    this.musicGain = this.ctx.createGain();
+    this.musicGain.connect(this.masterGain);
+    this.applyMusicVolume();
+
     this.initEngine();
     this.initDrift();
     this.initSurface();
@@ -162,7 +219,7 @@ export class AudioManager {
 
   private initEngine(): void {
     const ctx = this.ctx!;
-    const master = this.masterGain!;
+    const sfx = this.sfxGain!;
 
     // Primary engine oscillator (sawtooth for harsh engine tone)
     this.engineOsc = ctx.createOscillator();
@@ -171,7 +228,7 @@ export class AudioManager {
     this.engineGain = ctx.createGain();
     this.engineGain.gain.value = 0;
     this.engineOsc.connect(this.engineGain);
-    this.engineGain.connect(master);
+    this.engineGain.connect(sfx);
     this.engineOsc.start();
 
     // Secondary harmonic (square wave, one octave up)
@@ -181,13 +238,13 @@ export class AudioManager {
     this.engineGain2 = ctx.createGain();
     this.engineGain2.gain.value = 0;
     this.engineOsc2.connect(this.engineGain2);
-    this.engineGain2.connect(master);
+    this.engineGain2.connect(sfx);
     this.engineOsc2.start();
   }
 
   private initDrift(): void {
     const ctx = this.ctx!;
-    const master = this.masterGain!;
+    const sfx = this.sfxGain!;
 
     // Create noise buffer for tire screech
     const bufferSize = ctx.sampleRate * 2;
@@ -205,7 +262,7 @@ export class AudioManager {
     this.driftGain = ctx.createGain();
     this.driftGain.gain.value = 0;
     this.driftFilter.connect(this.driftGain);
-    this.driftGain.connect(master);
+    this.driftGain.connect(sfx);
 
     this.startNoiseSource();
   }
@@ -221,7 +278,7 @@ export class AudioManager {
 
   private initSurface(): void {
     const ctx = this.ctx!;
-    const master = this.masterGain!;
+    const sfx = this.sfxGain!;
 
     // Low-frequency hum that changes tone per surface
     this.surfaceOsc = ctx.createOscillator();
@@ -230,20 +287,20 @@ export class AudioManager {
     this.surfaceGain = ctx.createGain();
     this.surfaceGain.gain.value = 0;
     this.surfaceOsc.connect(this.surfaceGain);
-    this.surfaceGain.connect(master);
+    this.surfaceGain.connect(sfx);
     this.surfaceOsc.start();
   }
 
   private initMusic(): void {
     const ctx = this.ctx!;
-    const master = this.masterGain!;
+    const music = this.musicGain!;
 
     this.musicLeadOsc = ctx.createOscillator();
     this.musicLeadOsc.type = 'triangle';
     this.musicLeadGain = ctx.createGain();
     this.musicLeadGain.gain.value = 0;
     this.musicLeadOsc.connect(this.musicLeadGain);
-    this.musicLeadGain.connect(master);
+    this.musicLeadGain.connect(music);
     this.musicLeadOsc.start();
 
     this.musicBassOsc = ctx.createOscillator();
@@ -251,7 +308,7 @@ export class AudioManager {
     this.musicBassGain = ctx.createGain();
     this.musicBassGain.gain.value = 0;
     this.musicBassOsc.connect(this.musicBassGain);
-    this.musicBassGain.connect(master);
+    this.musicBassGain.connect(music);
     this.musicBassOsc.start();
 
     this.startMusicTimer();
@@ -331,10 +388,10 @@ export class AudioManager {
     this.engineOsc.frequency.value = freq;
     this.engineOsc2.frequency.value = freq * 2;
 
-    // Volume ramps up with speed
-    const vol = lerp(0.06, 0.18, speedRatio);
+    // Volume ramps up with speed (lowered from 0.06–0.18 to reduce harshness)
+    const vol = lerp(0.03, 0.10, speedRatio);
     this.engineGain.gain.value = vol;
-    this.engineGain2.gain.value = vol * 0.3;
+    this.engineGain2.gain.value = vol * 0.25;
   }
 
   private updateDrift(phase: DriftPhase, speedRatio: number): void {
