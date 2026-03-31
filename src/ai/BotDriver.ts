@@ -25,12 +25,22 @@ export class BotDriver {
   readonly personality: BotPersonality;
   currentCheckpointIndex = 0;
 
+  /** Difficulty multiplier applied to speed and rubber-banding. */
+  private speedMultiplier = 1.0;
+  private rubberBandMultiplier = 1.0;
+
   /** Accumulated random wander offset — makes bots imperfect. */
   private wanderOffset = 0;
   private wanderTimer = 0;
 
   constructor(personality: BotPersonality) {
     this.personality = personality;
+  }
+
+  /** Apply difficulty scaling to this bot driver. */
+  setDifficulty(speedMultiplier: number, rubberBandMultiplier: number): void {
+    this.speedMultiplier = speedMultiplier;
+    this.rubberBandMultiplier = rubberBandMultiplier;
   }
 
   /**
@@ -108,18 +118,18 @@ export class BotDriver {
       brake = 0;
     }
 
-    // Rubber-banding
+    // Rubber-banding (scaled by difficulty)
     const progressDiff = leaderProgress - ownProgress;
     let rubberBand = 1.0;
     if (progressDiff > 1) {
       // Behind the leader — boost
-      rubberBand = 1.0 + Math.min(progressDiff * 0.06, 0.25);
+      rubberBand = 1.0 + Math.min(progressDiff * 0.06 * this.rubberBandMultiplier, 0.25 * this.rubberBandMultiplier);
     } else if (progressDiff < -1) {
       // Ahead of everyone — slow down slightly
       rubberBand = 1.0 - Math.min(Math.abs(progressDiff) * 0.04, 0.15);
     }
 
-    throttle *= this.personality.speedFactor * rubberBand;
+    throttle *= this.personality.speedFactor * this.speedMultiplier * rubberBand;
     throttle = clamp(throttle, 0, 1);
 
     return { throttle, brake, steer, handbrake: 0 };

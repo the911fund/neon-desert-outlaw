@@ -32,6 +32,7 @@ import type { StoryState } from '../story/Mission';
 import { DialogueBox } from '../story/DialogueBox';
 import { STORY_MISSIONS } from '../story/StoryContent';
 import { getViewportSize } from '../utils/viewport';
+import { Difficulty, DIFFICULTY_CONFIGS } from './Difficulty';
 
 export class Game {
   private app: Application;
@@ -67,6 +68,7 @@ export class Game {
   // AI bots
   private bots: BotVehicle[] = [];
   private standings: RaceStandings;
+  private difficulty: Difficulty = Difficulty.NORMAL;
   private playerFinished = false;
   private playerFinishTime: number | null = null;
 
@@ -194,8 +196,9 @@ export class Game {
     });
 
     // Add UI elements (on top of world and lighting)
-    this.uiContainer.addChild(this.hud.container);
+    // MiniMap is added first so HUD overlays (standings, position, race overlay) render on top of it
     this.uiContainer.addChild(this.miniMap.container);
+    this.uiContainer.addChild(this.hud.container);
     this.uiContainer.addChild(this.touchControls.container);
     this.uiContainer.addChild(this.musicControls.container);
     this.app.stage.addChild(this.uiContainer);
@@ -395,11 +398,25 @@ export class Game {
     this.uiContainer.visible = visible;
   }
 
+  /** Set the AI difficulty level. Applies to all bots immediately. */
+  setDifficulty(difficulty: Difficulty): void {
+    this.difficulty = difficulty;
+    this.applyDifficultyToBots();
+  }
+
+  private applyDifficultyToBots(): void {
+    const config = DIFFICULTY_CONFIGS[this.difficulty];
+    for (const bot of this.bots) {
+      bot.driver.setDifficulty(config.botSpeedMultiplier, config.rubberBandMultiplier);
+    }
+  }
+
   private createBots(): void {
     for (let i = 0; i < BOT_PERSONALITIES.length; i++) {
       const bot = new BotVehicle(BOT_PERSONALITIES[i], BOT_COLORS[i]);
       this.bots.push(bot);
     }
+    this.applyDifficultyToBots();
     this.resetBots();
   }
 

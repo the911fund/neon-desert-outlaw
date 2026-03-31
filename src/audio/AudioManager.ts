@@ -19,6 +19,14 @@ interface ProceduralMusicTrack extends MusicTrackInfo {
   bpm: number;
   leadPattern: number[];
   bassPattern: number[];
+  /** Oscillator waveform for the lead voice. */
+  leadWave: OscillatorType;
+  /** Oscillator waveform for the bass voice. */
+  bassWave: OscillatorType;
+  /** Lead voice gain multiplier (default baseline is 0.085). */
+  leadGain: number;
+  /** Bass voice gain multiplier (default baseline is 0.05). */
+  bassGain: number;
 }
 
 export class AudioManager {
@@ -61,6 +69,10 @@ export class AudioManager {
       bpm: 132,
       leadPattern: [440, 494, 554, 659, 554, 494, 440, 392, 440, 494, 554, 659, 587, 523, 440, 0],
       bassPattern: [110, 110, 123, 123, 139, 139, 123, 123, 110, 110, 98, 98, 82, 82, 98, 0],
+      leadWave: 'triangle',
+      bassWave: 'sine',
+      leadGain: 0.09,
+      bassGain: 0.06,
     },
     {
       id: 'chrome-highway',
@@ -68,6 +80,10 @@ export class AudioManager {
       bpm: 122,
       leadPattern: [523, 587, 659, 698, 659, 587, 523, 466, 523, 587, 659, 698, 659, 587, 523, 0],
       bassPattern: [98, 98, 98, 98, 123, 123, 123, 123, 110, 110, 110, 110, 82, 82, 82, 0],
+      leadWave: 'sawtooth',
+      bassWave: 'square',
+      leadGain: 0.065,
+      bassGain: 0.045,
     },
     {
       id: 'neon-midnight',
@@ -75,6 +91,10 @@ export class AudioManager {
       bpm: 138,
       leadPattern: [349, 392, 440, 392, 523, 440, 392, 349, 392, 440, 494, 440, 523, 587, 440, 0],
       bassPattern: [87, 87, 87, 87, 110, 110, 110, 110, 98, 98, 98, 98, 73, 73, 73, 0],
+      leadWave: 'square',
+      bassWave: 'triangle',
+      leadGain: 0.07,
+      bassGain: 0.055,
     },
   ];
 
@@ -356,11 +376,15 @@ export class AudioManager {
     const bassNote = track.bassPattern[this.musicStep % track.bassPattern.length] ?? 0;
     const smooth = forceImmediate ? 0.001 : 0.025;
 
+    // Apply per-track waveforms so each track sounds distinct
+    this.musicLeadOsc.type = track.leadWave;
+    this.musicBassOsc.type = track.bassWave;
+
     this.musicLeadOsc.frequency.setTargetAtTime(Math.max(leadNote, 35), now, smooth);
     this.musicBassOsc.frequency.setTargetAtTime(Math.max(bassNote, 35), now, smooth);
 
-    const leadTarget = this._musicPlaying && leadNote > 0 ? 0.085 : 0;
-    const bassTarget = this._musicPlaying && bassNote > 0 ? 0.05 : 0;
+    const leadTarget = this._musicPlaying && leadNote > 0 ? track.leadGain : 0;
+    const bassTarget = this._musicPlaying && bassNote > 0 ? track.bassGain : 0;
     this.musicLeadGain.gain.setTargetAtTime(leadTarget, now, smooth);
     this.musicBassGain.gain.setTargetAtTime(bassTarget, now, smooth);
   }
