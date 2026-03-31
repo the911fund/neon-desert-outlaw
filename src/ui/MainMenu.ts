@@ -1,9 +1,11 @@
 import { Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { Difficulty, DIFFICULTY_CONFIGS } from '../game/Difficulty';
 
 export interface MainMenuCallbacks {
   onQuickRace: () => void;
   onStoryMode: () => void;
   onControls: () => void;
+  onDifficultyChange?: (difficulty: Difficulty) => void;
 }
 
 interface MenuItem {
@@ -51,6 +53,15 @@ export class MainMenu {
 
   private particleGraphics: Graphics;
   private particles: Particle[] = [];
+
+  private difficultyContainer: Container;
+  private difficultyLabel: Text;
+  private difficultyValue: Text;
+  private difficultyLeftArrow: Text;
+  private difficultyRightArrow: Text;
+  private difficultyBg: Graphics;
+  private currentDifficulty: Difficulty = Difficulty.NORMAL;
+  private readonly difficultyOrder: Difficulty[] = [Difficulty.EASY, Difficulty.NORMAL, Difficulty.HARD];
 
   private callbacks: MainMenuCallbacks;
   private screenWidth = 0;
@@ -104,6 +115,56 @@ export class MainMenu {
     this.createMenuItem('QUICK RACE', () => this.callbacks.onQuickRace());
     this.createMenuItem('STORY MODE', () => this.handleStoryMode());
     this.createMenuItem('CONTROLS', () => this.callbacks.onControls());
+
+    // Difficulty selector
+    this.difficultyContainer = new Container();
+    this.difficultyBg = new Graphics();
+    this.difficultyLabel = new Text({
+      text: 'DIFFICULTY',
+      style: new TextStyle({
+        fontFamily: 'monospace',
+        fontSize: 13,
+        fill: 0x888888,
+      }),
+    });
+    this.difficultyLabel.anchor.set(0.5, 0.5);
+
+    this.difficultyLeftArrow = new Text({
+      text: '◀',
+      style: new TextStyle({ fontFamily: 'monospace', fontSize: 22, fontWeight: 'bold', fill: NEON_CYAN }),
+    });
+    this.difficultyLeftArrow.anchor.set(0.5, 0.5);
+    this.difficultyLeftArrow.eventMode = 'static';
+    this.difficultyLeftArrow.cursor = 'pointer';
+    this.difficultyLeftArrow.on('pointertap', () => this.cycleDifficulty(-1));
+
+    this.difficultyRightArrow = new Text({
+      text: '▶',
+      style: new TextStyle({ fontFamily: 'monospace', fontSize: 22, fontWeight: 'bold', fill: NEON_CYAN }),
+    });
+    this.difficultyRightArrow.anchor.set(0.5, 0.5);
+    this.difficultyRightArrow.eventMode = 'static';
+    this.difficultyRightArrow.cursor = 'pointer';
+    this.difficultyRightArrow.on('pointertap', () => this.cycleDifficulty(1));
+
+    this.difficultyValue = new Text({
+      text: DIFFICULTY_CONFIGS[this.currentDifficulty].label,
+      style: new TextStyle({
+        fontFamily: 'monospace',
+        fontSize: 22,
+        fontWeight: 'bold',
+        fill: NEON_MAGENTA,
+        dropShadow: { color: NEON_MAGENTA, blur: 8, distance: 0 },
+      }),
+    });
+    this.difficultyValue.anchor.set(0.5, 0.5);
+
+    this.difficultyContainer.addChild(this.difficultyBg);
+    this.difficultyContainer.addChild(this.difficultyLabel);
+    this.difficultyContainer.addChild(this.difficultyLeftArrow);
+    this.difficultyContainer.addChild(this.difficultyValue);
+    this.difficultyContainer.addChild(this.difficultyRightArrow);
+    this.container.addChild(this.difficultyContainer);
 
     this.toastText = new Text({
       text: 'Coming Soon...',
@@ -290,6 +351,14 @@ export class MainMenu {
       : false;
   }
 
+  private cycleDifficulty(direction: number): void {
+    const idx = this.difficultyOrder.indexOf(this.currentDifficulty);
+    const newIdx = (idx + direction + this.difficultyOrder.length) % this.difficultyOrder.length;
+    this.currentDifficulty = this.difficultyOrder[newIdx];
+    this.difficultyValue.text = DIFFICULTY_CONFIGS[this.currentDifficulty].label;
+    this.callbacks.onDifficultyChange?.(this.currentDifficulty);
+  }
+
   private handleStoryMode(): void {
     this.callbacks.onStoryMode();
   }
@@ -299,6 +368,7 @@ export class MainMenu {
     this.controlsContainer.visible = true;
     this.titleText.visible = false;
     this.subtitleText.visible = false;
+    this.difficultyContainer.visible = false;
     for (const item of this.items) {
       item.container.visible = false;
     }
@@ -311,6 +381,7 @@ export class MainMenu {
     this.controlsContainer.visible = false;
     this.titleText.visible = true;
     this.subtitleText.visible = true;
+    this.difficultyContainer.visible = true;
     for (const item of this.items) {
       item.container.visible = true;
     }
@@ -413,8 +484,18 @@ export class MainMenu {
     }
     this.updateSelection();
 
+    // Difficulty selector positioned below menu items
+    const diffY = menuStartY + this.items.length * itemSpacing + 12;
+    this.difficultyContainer.position.set(cx, diffY);
+    this.difficultyLabel.position.set(0, -14);
+    this.difficultyLabel.style.fontSize = isPhone ? 11 : 13;
+    this.difficultyLeftArrow.position.set(-80, 10);
+    this.difficultyValue.position.set(0, 10);
+    this.difficultyValue.style.fontSize = isPhone ? 18 : 22;
+    this.difficultyRightArrow.position.set(80, 10);
+
     this.toastText.style.fontSize = isPhone ? 20 : 24;
-    this.toastText.position.set(cx, menuStartY + this.items.length * itemSpacing + 28);
+    this.toastText.position.set(cx, diffY + 50);
 
     if (this.showingControls) {
       this.layoutControls();

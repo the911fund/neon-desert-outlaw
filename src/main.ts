@@ -3,6 +3,7 @@ import { Game } from './game/Game';
 import { GameModeManager, GameMode } from './game/GameModeManager';
 import { MainMenu } from './ui/MainMenu';
 import { getViewportSize } from './utils/viewport';
+import { Difficulty } from './game/Difficulty';
 
 const root = document.getElementById('app');
 if (!root) {
@@ -22,10 +23,13 @@ app
 
     const modeManager = new GameModeManager();
 
+    let pendingDifficulty: Difficulty = Difficulty.NORMAL;
+
     const menu = new MainMenu({
       onQuickRace: () => modeManager.startQuickRace(),
       onStoryMode: () => modeManager.startStory(),
       onControls: () => modeManager.showControls(),
+      onDifficultyChange: (d: Difficulty) => { pendingDifficulty = d; },
     });
 
     app.stage.addChild(menu.container);
@@ -45,10 +49,12 @@ app
           break;
         case GameMode.PLAYING:
           menu.container.visible = false;
+          game.setDifficulty(pendingDifficulty);
           game.start();
           break;
         case GameMode.STORY:
           menu.container.visible = false;
+          game.setDifficulty(pendingDifficulty);
           game.startStory();
           break;
         case GameMode.CONTROLS:
