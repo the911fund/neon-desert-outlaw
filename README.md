@@ -6,7 +6,7 @@ A neon-soaked, physics-driven desert racing game built with PixiJS and TypeScrip
 
 ## 🎮 Play
 
-**[Play Online](https://the911fund.github.io/neon-desert-outlaw/)** — runs in any modern browser, desktop or mobile.
+**[Play Online](https://turbo.911fund.io/)** — runs in any modern browser, desktop or mobile.
 
 ## About
 
